@@ -1,0 +1,9 @@
+[package]
+name = "simple-di"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dashmap = "6"
+ahash = "0"
+parking_lot = "*"
