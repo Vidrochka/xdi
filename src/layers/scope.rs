@@ -4,42 +4,39 @@ Scope layer apply scope filter (clone/build singletone, clone/build task, build 
 
 */
 
-use std::{mem, sync::OnceLock};
+use std::mem;
 
 use ahash::AHashMap;
 use dashmap::DashMap;
 use parking_lot::Mutex;
 
-use crate::types::{boxed_service::BoxedService, boxed_service_sync::SyncBoxedService, type_info::{TypeInfo, TypeInfoSource}};
+use crate::{types::{boxed_service::BoxedService, boxed_service_sync::SyncBoxedService, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
 
 use super::service::{ServiceDescriptior, ServiceLayer};
 
-static SCOPE_LAYER: OnceLock<ScopeLayer> = OnceLock::new();
-
 #[derive(Debug)]
 pub struct ScopeLayer {
+    service_layer: ServiceLayer,
     scopes: AHashMap<TypeInfo, ServiceScopeDescriptior>,
 }
 
 impl ScopeLayer {
-    pub fn get(ty: TypeInfo) -> Option<BoxedService> {
-        let scopes_layer = SCOPE_LAYER.get()?;
+    pub fn get(&self, ty: TypeInfo, sp: ServiceProvider) -> Option<BoxedService> {
+        let service = self.service_layer.get(ty)?;
 
-        let service = ServiceLayer::get(ty)?;
-
-        let Some(scope) = scopes_layer.scopes.get(&ty) else {
-            return Some(service.factory.build());
+        let Some(scope) = self.scopes.get(&ty) else {
+            return Some(service.factory.build(sp));
         };
 
         assert_eq!(scope.ty(), ty);
         assert_eq!(scope.ty(), service.ty());
         
         match &scope.scope {
-            Scope::Transient => Some(service.factory.build()),
+            Scope::Transient => Some(service.factory.build(sp)),
             Scope::Singletone(singletone_state) => {
                 let mut singletone_state_lock = singletone_state.lock();
 
-                let service =  singletone_state_lock.build(service);
+                let service =  singletone_state_lock.build(service, sp);
 
                 return Some(service);                
             },
@@ -47,10 +44,11 @@ impl ScopeLayer {
         }
     }
 
-    pub fn set(builder: ScopeLayerBuilder) {
-        SCOPE_LAYER.set(ScopeLayer {
+    pub fn new(builder: ScopeLayerBuilder, service_layer: ServiceLayer) -> Self {
+        ScopeLayer {
+            service_layer,
             scopes: builder.scopes.into_iter().collect()
-        }).unwrap();
+        }
     }
 }
 
@@ -135,12 +133,12 @@ impl SingletoneProducer {
         matches!(self, Self::Pending { .. })
     }
 
-    pub fn build(&mut self, service_descriptor: ServiceDescriptior) -> BoxedService {
+    pub fn build(&mut self, service_descriptor: ServiceDescriptior, sp: ServiceProvider) -> BoxedService {
         let old_val = mem::replace(self, Self::Empty);
 
         match old_val {
             SingletoneProducer::Pending { syncer, splitter, unsyncer, } => {
-                let service = service_descriptor.factory.build();
+                let service = service_descriptor.factory.build(sp);
 
                 let service = syncer(service);
 
@@ -206,7 +204,7 @@ impl ScopeLayerBuilder {
         self.scopes.insert(TService::type_info(), ServiceScopeDescriptior::task::<TService>());
     }
     
-    pub fn build(self) {
-        ScopeLayer::set(self);
+    pub fn build(self, service_layer: ServiceLayer) -> ScopeLayer {
+        ScopeLayer::new(self, service_layer)
     }
 }

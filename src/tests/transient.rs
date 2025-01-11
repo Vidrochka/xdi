@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Mutex};
 
-use crate::{builder::SimpleDiBuilder, ServiceProvider};
+use crate::builder::SimpleDiBuilder;
 
 pub struct Service1 {
     pub payload: String
@@ -19,19 +19,19 @@ pub struct Service2 {
 pub fn set_get_transient_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.transient(|| Service1 {
+    builder.transient(|_| Service1 {
         payload: "1".to_string()
     });
 
-    builder.build();
+    let sp = builder.build();
 
-    let mut service = ServiceProvider::resolve::<Service1>().unwrap();
+    let mut service = sp.resolve::<Service1>().unwrap();
 
     assert_eq!(service.payload, "1");
 
     service.payload = "2".to_string();
 
-    let service = ServiceProvider::resolve::<Service1>().unwrap();
+    let service = sp.resolve::<Service1>().unwrap();
 
     assert_eq!(service.payload, "1");
 }
@@ -40,19 +40,19 @@ pub fn set_get_transient_ok() {
 pub fn set_get_not_send_transient_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.transient(|| ServiceNotSend1 {
+    builder.transient(|_| ServiceNotSend1 {
         payload: Rc::new(Mutex::new("1".to_string()))
     });
 
-    builder.build();
+    let sp = builder.build();
 
-    let service = ServiceProvider::resolve::<ServiceNotSend1>().unwrap();
+    let service = sp.resolve::<ServiceNotSend1>().unwrap();
 
     assert_eq!(*service.payload.lock().unwrap(), "1");
 
     *service.payload.lock().unwrap() = "2".to_string();
 
-    let service = ServiceProvider::resolve::<ServiceNotSend1>().unwrap();
+    let service = sp.resolve::<ServiceNotSend1>().unwrap();
 
     assert_eq!(*service.payload.lock().unwrap(), "1");
 }
@@ -61,22 +61,22 @@ pub fn set_get_not_send_transient_ok() {
 pub fn set_get_nested_transient_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.transient(|| Service1 {
+    builder.transient(|_| Service1 {
         payload: "1".to_string()
     });
 
-    builder.transient(|| ServiceNotSend1 {
+    builder.transient(|_| ServiceNotSend1 {
         payload: Rc::new(Mutex::new("2".to_string()))
     });
 
-    builder.transient(|| Service2 {
-        service1: ServiceProvider::resolve().unwrap(),
-        service2: ServiceProvider::resolve().unwrap(),
+    builder.transient(|sp| Service2 {
+        service1: sp.resolve().unwrap(),
+        service2: sp.resolve().unwrap(),
     });
 
-    builder.build();
+    let sp = builder.build();
 
-    let service = ServiceProvider::resolve::<Service2>().unwrap();
+    let service = sp.resolve::<Service2>().unwrap();
 
     assert_eq!(service.service1.payload, "1");
     assert_eq!(*service.service2.payload.lock().unwrap(), "2");

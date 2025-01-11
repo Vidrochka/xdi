@@ -14,30 +14,25 @@ Then in abstraction convert service T to Box<dyn Tr>
 
 */
 
-use std::sync::OnceLock;
-
 use ahash::AHashMap;
 use dashmap::DashMap;
 
-use crate::types::{boxed_service::BoxedService, type_info::{TypeInfo, TypeInfoSource}};
+use crate::{types::{boxed_service::BoxedService, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
 
 use super::scope::ScopeLayer;
 
-static MAPPING_LAYER: OnceLock<MappingLayer> = OnceLock::new();
-
 #[derive(Debug)]
 pub struct MappingLayer {
+    scope_layer: ScopeLayer,
     mappings: AHashMap<TypeInfo, Vec<MappingDescriptor>>
 }
 
 impl MappingLayer {
-    pub fn resolve_raw(ty: TypeInfo) -> Option<BoxedService> {
-        let mapping_layer = MAPPING_LAYER.get()?;
-
-        let mapping = mapping_layer.mappings.get(&ty)
+    pub fn resolve_raw(&self, ty: TypeInfo, sp: ServiceProvider) -> Option<BoxedService> {
+        let mapping = self.mappings.get(&ty)
             .and_then(|x| x.first())?;
 
-        let service= ScopeLayer::get(mapping.src_ty())?;
+        let service= self.scope_layer.get(mapping.src_ty(), sp)?;
 
         assert_eq!(mapping.dest_ty(), ty);
         assert_eq!(mapping.src_ty(), service.ty());
@@ -45,18 +40,19 @@ impl MappingLayer {
         Some(mapping.mapper.map(service))
     }
 
-    pub fn resolve<TService: 'static>() -> Option<TService> {
+    pub fn resolve<TService: 'static>(&self, sp: ServiceProvider) -> Option<TService> {
         let ty = TService::type_info();
 
-        let service = Self::resolve_raw(ty);
+        let service = self.resolve_raw(ty, sp);
 
         service.map(|x| x.unbox::<TService>().unwrap())
     }
 
-    pub fn set(builder: MappingLayerBuilder) {
-        MAPPING_LAYER.set(MappingLayer {
+    pub fn new(builder: MappingLayerBuilder, scope_layer: ScopeLayer) -> Self {
+        MappingLayer {
+            scope_layer,
             mappings: builder.mappings.into_iter().collect()
-        }).unwrap();
+        }
     }
 }
 
@@ -127,7 +123,7 @@ impl MappingLayerBuilder {
         };
     }
 
-    pub fn build(self) {
-        MappingLayer::set(self);
+    pub fn build(self, scope_layer: ScopeLayer) -> MappingLayer {
+        MappingLayer::new(self, scope_layer)
     }
 }
