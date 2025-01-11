@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Mutex};
 
-use crate::builder::SimpleDiBuilder;
+use crate::{builder::SimpleDiBuilder, types::error::ServiceBuildResult, ServiceProvider};
 
 pub struct Service1 {
     pub payload: String
@@ -16,12 +16,68 @@ pub struct Service2 {
 }
 
 #[test]
-pub fn set_get_transient_ok() {
+pub fn set_get_transient_from_closure_ok() {
     let builder = SimpleDiBuilder::new();
 
     builder.transient(|_| Ok(Service1 {
         payload: "1".to_string()
     }));
+
+    let sp = builder.build();
+
+    let mut service = sp.resolve::<Service1>().unwrap();
+
+    assert_eq!(service.payload, "1");
+
+    service.payload = "2".to_string();
+
+    let service = sp.resolve::<Service1>().unwrap();
+
+    assert_eq!(service.payload, "1");
+}
+
+#[test]
+pub fn set_get_transient_from_fn_ok() {
+    let builder = SimpleDiBuilder::new();
+
+    fn service_ctr(_sp: ServiceProvider) -> ServiceBuildResult<Service1> {
+        Ok(Service1 {
+            payload: "1".to_string()
+        })
+    }
+
+    builder.transient(service_ctr);
+
+    let sp = builder.build();
+
+    let mut service = sp.resolve::<Service1>().unwrap();
+
+    assert_eq!(service.payload, "1");
+
+    service.payload = "2".to_string();
+
+    let service = sp.resolve::<Service1>().unwrap();
+
+    assert_eq!(service.payload, "1");
+}
+
+#[test]
+pub fn set_get_transient_from_method_ok() {
+    let builder = SimpleDiBuilder::new();
+
+    trait Ctor {
+        fn service_ctr(_sp: ServiceProvider) -> ServiceBuildResult<Service1>;
+    }
+
+    impl Ctor for Service1 {
+        fn service_ctr(_sp: ServiceProvider) -> ServiceBuildResult<Service1> {
+            Ok(Service1 {
+                payload: "1".to_string()
+            })
+        }
+    }
+    
+    builder.transient(Service1::service_ctr);
 
     let sp = builder.build();
 
