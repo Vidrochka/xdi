@@ -32,11 +32,7 @@ pub struct MappingLayer {
 
 impl MappingLayer {
     pub fn resolve_raw(ty: TypeInfo) -> Option<BoxedService> {
-        let mapping_layer = MAPPING_LAYER.get_or_init(|| {
-            MappingLayer {
-                mappings: Default::default(),
-            }
-        });
+        let mapping_layer = MAPPING_LAYER.get()?;
 
         let mapping = mapping_layer.mappings.get(&ty)
             .and_then(|x| x.first())?;

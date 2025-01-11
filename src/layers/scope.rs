@@ -23,11 +23,7 @@ pub struct ScopeLayer {
 
 impl ScopeLayer {
     pub fn get(ty: TypeInfo) -> Option<BoxedService> {
-        let scopes_layer = SCOPE_LAYER.get_or_init(|| {
-            ScopeLayer {
-                scopes: Default::default(),
-            }
-        });
+        let scopes_layer = SCOPE_LAYER.get()?;
 
         let service = ServiceLayer::get(ty)?;
 

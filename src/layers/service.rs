@@ -20,11 +20,7 @@ pub struct ServiceLayer {
 
 impl ServiceLayer {
     pub fn get(ty: TypeInfo) -> Option<ServiceDescriptior> {
-        let service_layer = SERVICE_LAYER.get_or_init(|| {
-            ServiceLayer {
-                services: Default::default(),
-            }
-        });
+        let service_layer = SERVICE_LAYER.get()?;
 
         service_layer.services.get(&ty).cloned()
     }
