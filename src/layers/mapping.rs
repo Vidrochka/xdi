@@ -17,7 +17,7 @@ Then in abstraction convert service T to Box<dyn Tr>
 use ahash::AHashMap;
 use dashmap::DashMap;
 
-use crate::{types::{boxed_service::BoxedService, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
+use crate::{types::{boxed_service::BoxedService, error::{ServiceBuildError, ServiceBuildResult}, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
 
 use super::scope::ScopeLayer;
 
@@ -28,24 +28,29 @@ pub struct MappingLayer {
 }
 
 impl MappingLayer {
-    pub fn resolve_raw(&self, ty: TypeInfo, sp: ServiceProvider) -> Option<BoxedService> {
+    pub fn resolve_raw(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         let mapping = self.mappings.get(&ty)
-            .and_then(|x| x.first())?;
+            .and_then(|x| x.first())
+            .ok_or(ServiceBuildError::MappingNotFound)?;
 
         let service= self.scope_layer.get(mapping.src_ty(), sp)?;
 
         assert_eq!(mapping.dest_ty(), ty);
         assert_eq!(mapping.src_ty(), service.ty());
 
-        Some(mapping.mapper.map(service))
+        mapping.mapper.map(service)
     }
 
-    pub fn resolve<TService: 'static>(&self, sp: ServiceProvider) -> Option<TService> {
+    pub fn resolve<TService: 'static>(&self, sp: ServiceProvider) -> ServiceBuildResult<TService> {
         let ty = TService::type_info();
 
-        let service = self.resolve_raw(ty, sp);
+        let service = self.resolve_raw(ty, sp)?;
 
-        service.map(|x| x.unbox::<TService>().unwrap())
+        service.unbox::<TService>()
+            .map_err(|e| ServiceBuildError::InvalidMappingLayerBoxedOutputType {
+                expected: TService::type_info(),
+                found: e.ty()
+            })
     }
 
     pub fn new(builder: MappingLayerBuilder, scope_layer: ScopeLayer) -> Self {
@@ -64,13 +69,20 @@ pub struct MappingDescriptor {
 }
 
 impl MappingDescriptor {
-    pub fn new<TSrc: 'static, TDst: 'static>(mapper: impl Fn(TSrc) -> TDst + Send + Sync + 'static) -> Self {
+    pub fn new<TSrc: 'static, TDst: 'static>(mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Send + Sync + 'static) -> Self {
         Self {
             src_ty: TSrc::type_info(),
             dest_ty: TSrc::type_info(),
             mapper: ServiceMapper(Box::new(move |service| {
-                let service = mapper(service.unbox::<TSrc>().unwrap());
-                BoxedService::new(service)
+                let service = service.unbox::<TSrc>()
+                    .map_err(|e| ServiceBuildError::InvalidMappingLayerBoxedInputType {
+                        expected: TSrc::type_info(),
+                        found: e.ty()
+                    })?;
+
+                let service = mapper(service)?;
+
+                Ok(BoxedService::new(service))
             }))
         }
     }
@@ -84,14 +96,14 @@ impl MappingDescriptor {
     }
 }
 
-pub struct ServiceMapper(Box<dyn Fn(BoxedService) -> BoxedService + Send + Sync>);
+pub struct ServiceMapper(Box<dyn Fn(BoxedService) -> ServiceBuildResult<BoxedService> + Send + Sync>);
 
 impl ServiceMapper {
-    pub fn new(converter: impl Fn(BoxedService) -> BoxedService + 'static + Send + Sync) -> Self {
+    pub fn new(converter: impl Fn(BoxedService) -> ServiceBuildResult<BoxedService> + 'static + Send + Sync) -> Self {
         Self(Box::new(converter))
     }
 
-    pub fn map(&self, service: BoxedService) -> BoxedService {
+    pub fn map(&self, service: BoxedService) -> ServiceBuildResult<BoxedService> {
         (self.0)(service)
     }
 }
@@ -112,7 +124,7 @@ impl MappingLayerBuilder {
         Self { mappings: Default::default() }
     }
 
-    pub fn add_mapping<TSrc: 'static, TDst: 'static>(&self, mapper: impl Fn(TSrc) -> TDst + Sync + Send + 'static) {
+    pub fn add_mapping<TSrc: 'static, TDst: 'static>(&self, mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Sync + Send + 'static) {
         match self.mappings.entry(TDst::type_info()) {
             dashmap::Entry::Occupied(mut occupied_entry) => {
                 occupied_entry.get_mut().push(MappingDescriptor::new::<TSrc, TDst>(mapper));

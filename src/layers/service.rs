@@ -9,7 +9,7 @@ use std::{fmt::Debug, sync::Arc};
 use ahash::AHashMap;
 use dashmap::DashMap;
 
-use crate::{types::{boxed_service::BoxedService, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
+use crate::{types::{boxed_service::BoxedService, error::{ServiceBuildError, ServiceBuildResult}, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
 
 #[derive(Debug)]
 pub struct ServiceLayer {
@@ -17,8 +17,8 @@ pub struct ServiceLayer {
 }
 
 impl ServiceLayer {
-    pub fn get(&self, ty: TypeInfo) -> Option<ServiceDescriptior> {
-        self.services.get(&ty).cloned()
+    pub fn get(&self, ty: TypeInfo) -> ServiceBuildResult<ServiceDescriptior> {
+        self.services.get(&ty).cloned().ok_or(ServiceBuildError::ServiceNotDound)
     }
 
     pub fn new(builder: ServiceLayerBuilder) -> Self {
@@ -35,12 +35,12 @@ pub struct ServiceDescriptior {
 }
 
 impl ServiceDescriptior {
-    pub fn from_factory<TService: 'static>(factory: impl Fn(ServiceProvider) -> TService + Send + Sync + 'static) -> Self {
+    pub fn from_factory<TService: 'static>(factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static) -> Self {
         Self {
             ty: TService::type_info(),
-            factory: ServiceFactory(Arc::new(move |sp: ServiceProvider| {
-                let service = factory(sp);
-                BoxedService::new(service)
+            factory: ServiceFactory(Arc::new(move |sp: ServiceProvider| -> ServiceBuildResult<BoxedService> {
+                let service = factory(sp)?;
+                Ok(BoxedService::new(service))
             }))
         }
     }
@@ -51,10 +51,10 @@ impl ServiceDescriptior {
 }
 
 #[derive(Clone)]
-pub struct ServiceFactory(Arc<dyn Fn(ServiceProvider) -> BoxedService + Sync + Send>);
+pub struct ServiceFactory(Arc<dyn Fn(ServiceProvider) -> ServiceBuildResult<BoxedService> + Sync + Send>);
 
 impl ServiceFactory {
-    pub fn build(&self, sp: ServiceProvider) -> BoxedService {
+    pub fn build(&self, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         (self.0)(sp)
     }
 }
@@ -75,7 +75,7 @@ impl ServiceLayerBuilder {
         Self { services: Default::default() }
     }
 
-    pub fn add_service<TService: 'static>(&self, factory: impl Fn(ServiceProvider) -> TService + Send + Sync + 'static) {
+    pub fn add_service<TService: 'static>(&self, factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static) {
         self.services.insert(TService::type_info(), ServiceDescriptior::from_factory(factory));
     }
 

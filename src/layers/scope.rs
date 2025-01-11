@@ -10,7 +10,7 @@ use ahash::AHashMap;
 use dashmap::DashMap;
 use parking_lot::Mutex;
 
-use crate::{types::{boxed_service::BoxedService, boxed_service_sync::SyncBoxedService, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
+use crate::{types::{boxed_service::BoxedService, boxed_service_sync::SyncBoxedService, error::{ServiceBuildError, ServiceBuildResult}, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
 
 use super::service::{ServiceDescriptior, ServiceLayer};
 
@@ -21,24 +21,20 @@ pub struct ScopeLayer {
 }
 
 impl ScopeLayer {
-    pub fn get(&self, ty: TypeInfo, sp: ServiceProvider) -> Option<BoxedService> {
-        let service = self.service_layer.get(ty)?;
+    pub fn get(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
+        let scope = self.scopes.get(&ty).ok_or(ServiceBuildError::MappingNotFound)?;
 
-        let Some(scope) = self.scopes.get(&ty) else {
-            return Some(service.factory.build(sp));
-        };
+        let service = self.service_layer.get(ty)?;
 
         assert_eq!(scope.ty(), ty);
         assert_eq!(scope.ty(), service.ty());
         
         match &scope.scope {
-            Scope::Transient => Some(service.factory.build(sp)),
+            Scope::Transient => service.factory.build(sp),
             Scope::Singletone(singletone_state) => {
                 let mut singletone_state_lock = singletone_state.lock();
 
-                let service =  singletone_state_lock.build(service, sp);
-
-                return Some(service);                
+                return singletone_state_lock.build(service, sp);
             },
             Scope::Task => todo!(),
         }
@@ -79,17 +75,32 @@ impl ServiceScopeDescriptior {
             scope: Scope::Singletone(
                 Mutex::new(SingletoneProducer::Pending {
                     syncer: Box::new(|service| {
-                        let service = service.unbox::<TService>().unwrap();
-                        SyncBoxedService::new(service)
+                        let service = service.unbox::<TService>()
+                            .map_err(|e| ServiceBuildError::InvalidScopeLayerBoxedInputType {
+                                expected: TService::type_info(),
+                                found: e.ty()
+                            })?;
+                        Ok(SyncBoxedService::new(service))
                     }),
                     splitter: Box::new(|service| {
-                        let service = service.unbox::<TService>().unwrap();
+                        let service = service.unbox::<TService>()
+                            .map_err(|e| ServiceBuildError::UnexpectedSingletoneSplitterParams {
+                                expected: TService::type_info(),
+                                found: e.ty()
+                            })?;
+
                         let copy = service.clone();
-                        (SyncBoxedService::new(service), SyncBoxedService::new(copy))
+
+                        Ok((SyncBoxedService::new(service), SyncBoxedService::new(copy)))
                     }),
                     unsyncer: Box::new(|service| {
-                        let service = service.unbox::<TService>().unwrap();
-                        BoxedService::new(service)
+                        let service = service.unbox::<TService>()
+                            .map_err(|e| ServiceBuildError::InvalidScopeLayerBoxedOutputType {
+                                expected: TService::type_info(),
+                                found: e.ty()
+                            })?;
+
+                        Ok(BoxedService::new(service))
                     }),
                 })
             )
@@ -109,9 +120,9 @@ pub enum Scope {
     Task,
 }
 
-type Syncer = Box<dyn Fn(BoxedService) -> SyncBoxedService + Send + Sync>;
-type UnSyncer = Box<dyn Fn(SyncBoxedService) -> BoxedService + Send + Sync>;
-type SingletoneSplitter = Box<dyn Fn(SyncBoxedService) -> (SyncBoxedService, SyncBoxedService) + Send + Sync>;
+type Syncer = Box<dyn Fn(BoxedService) -> ServiceBuildResult<SyncBoxedService> + Send + Sync>;
+type UnSyncer = Box<dyn Fn(SyncBoxedService) -> ServiceBuildResult<BoxedService> + Send + Sync>;
+type SingletoneSplitter = Box<dyn Fn(SyncBoxedService) -> ServiceBuildResult<(SyncBoxedService, SyncBoxedService)> + Send + Sync>;
 
 pub enum SingletoneProducer {
     Pending {
@@ -133,18 +144,18 @@ impl SingletoneProducer {
         matches!(self, Self::Pending { .. })
     }
 
-    pub fn build(&mut self, service_descriptor: ServiceDescriptior, sp: ServiceProvider) -> BoxedService {
+    pub fn build(&mut self, service_descriptor: ServiceDescriptior, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         let old_val = mem::replace(self, Self::Empty);
 
         match old_val {
             SingletoneProducer::Pending { syncer, splitter, unsyncer, } => {
-                let service = service_descriptor.factory.build(sp);
+                let service = service_descriptor.factory.build(sp)?;
 
-                let service = syncer(service);
+                let service = syncer(service)?;
 
-                let (instance, copy) = splitter(service);
+                let (instance, copy) = splitter(service)?;
 
-                let copy = unsyncer(copy);
+                let copy = unsyncer(copy)?;
 
                 *self = SingletoneProducer::Created {
                     instance,
@@ -152,12 +163,12 @@ impl SingletoneProducer {
                     unsyncer,
                 };
 
-                copy
+                Ok(copy)
             },
             SingletoneProducer::Created { instance, splitter, unsyncer } => {
-                let (instance, copy) = splitter(instance);
+                let (instance, copy) = splitter(instance)?;
                 
-                let copy = unsyncer(copy);
+                let copy = unsyncer(copy)?;
 
                 *self = SingletoneProducer::Created {
                     instance,
@@ -165,7 +176,7 @@ impl SingletoneProducer {
                     unsyncer,
                 };
 
-                copy
+                Ok(copy)
             },
             SingletoneProducer::Empty => unreachable!("Empty state only for data transition"),
         }

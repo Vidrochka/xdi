@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use layers::mapping::MappingLayer;
-use types::{boxed_service::BoxedService, type_info::TypeInfo};
+use types::{boxed_service::BoxedService, error::ServiceBuildResult, type_info::TypeInfo};
 
 pub mod layers;
 pub mod types;
@@ -22,11 +22,11 @@ impl ServiceProvider {
         SERVICE_PROVIDER.get()
     }
 
-    pub fn resolve<TService: 'static>(&self) -> Option<TService> {
+    pub fn resolve<TService: 'static>(&self) -> ServiceBuildResult<TService> {
         self.mapping_layer.resolve::<TService>(self.clone())
     }
 
-    pub fn resolve_raw(&self, ty: TypeInfo) -> Option<BoxedService> {
+    pub fn resolve_raw(&self, ty: TypeInfo) -> ServiceBuildResult<BoxedService> {
         self.mapping_layer.resolve_raw(ty, self.clone())
     }
 

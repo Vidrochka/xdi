@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{layers::{mapping::MappingLayerBuilder, scope::ScopeLayerBuilder, service::ServiceLayerBuilder}, ServiceProvider};
+use crate::{layers::{mapping::MappingLayerBuilder, scope::ScopeLayerBuilder, service::ServiceLayerBuilder}, types::error::ServiceBuildResult, ServiceProvider};
 
 
 #[derive(Debug)]
@@ -19,16 +19,16 @@ impl SimpleDiBuilder {
         }
     }
 
-    pub fn transient<TService: 'static>(&self, factory: impl Fn(ServiceProvider) -> TService + Send + Sync + 'static) {
+    pub fn transient<TService: 'static>(&self, factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static) {
         self.service_layer.add_service(factory);
         self.scope_layer.add_transient::<TService>();
-        self.mapping_layer.add_mapping::<TService, TService>(|x| x);
+        self.mapping_layer.add_mapping::<TService, TService>(|x| Ok(x));
     }
 
-    pub fn singletone<TService: Send + Sync + Clone + 'static>(&self, factory: impl Fn(ServiceProvider) -> TService + Send + Sync + 'static) {
+    pub fn singletone<TService: Send + Sync + Clone + 'static>(&self, factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static) {
         self.service_layer.add_service(factory);
         self.scope_layer.add_singletone::<TService>();
-        self.mapping_layer.add_mapping::<TService, TService>(|x| x);
+        self.mapping_layer.add_mapping::<TService, TService>(|x| Ok(x));
     }
 
     pub fn build(self) -> ServiceProvider {

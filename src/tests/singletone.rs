@@ -10,9 +10,9 @@ pub struct Service1 {
 pub fn set_get_singletone_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.singletone(|_| Arc::new(Mutex::new(Service1 {
+    builder.singletone(|_| Ok(Arc::new(Mutex::new(Service1 {
         payload: "1".to_string()
-    })));
+    }))));
 
     let sp = builder.build();
 

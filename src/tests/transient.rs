@@ -19,9 +19,9 @@ pub struct Service2 {
 pub fn set_get_transient_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.transient(|_| Service1 {
+    builder.transient(|_| Ok(Service1 {
         payload: "1".to_string()
-    });
+    }));
 
     let sp = builder.build();
 
@@ -40,9 +40,9 @@ pub fn set_get_transient_ok() {
 pub fn set_get_not_send_transient_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.transient(|_| ServiceNotSend1 {
+    builder.transient(|_| Ok(ServiceNotSend1 {
         payload: Rc::new(Mutex::new("1".to_string()))
-    });
+    }));
 
     let sp = builder.build();
 
@@ -61,18 +61,18 @@ pub fn set_get_not_send_transient_ok() {
 pub fn set_get_nested_transient_ok() {
     let builder = SimpleDiBuilder::new();
 
-    builder.transient(|_| Service1 {
+    builder.transient(|_| Ok(Service1 {
         payload: "1".to_string()
-    });
+    }));
 
-    builder.transient(|_| ServiceNotSend1 {
+    builder.transient(|_| Ok(ServiceNotSend1 {
         payload: Rc::new(Mutex::new("2".to_string()))
-    });
+    }));
 
-    builder.transient(|sp| Service2 {
+    builder.transient(|sp| Ok(Service2 {
         service1: sp.resolve().unwrap(),
         service2: sp.resolve().unwrap(),
-    });
+    }));
 
     let sp = builder.build();
 
