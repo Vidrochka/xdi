@@ -1,3 +1,5 @@
+#![feature(unsize)]
+
 use std::sync::{Arc, OnceLock};
 
 use layers::mapping::MappingLayer;

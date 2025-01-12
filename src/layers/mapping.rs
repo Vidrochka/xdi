@@ -72,7 +72,7 @@ impl MappingDescriptor {
     pub fn new<TSrc: 'static, TDst: 'static>(mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Send + Sync + 'static) -> Self {
         Self {
             src_ty: TSrc::type_info(),
-            dest_ty: TSrc::type_info(),
+            dest_ty: TDst::type_info(),
             mapper: ServiceMapper(Box::new(move |service| {
                 let service = service.unbox::<TSrc>()
                     .map_err(|e| ServiceBuildError::InvalidMappingLayerBoxedInputType {
