@@ -1,34 +1,90 @@
 # simple-di
-Simple dependency manager implementation
 
-```rs
-use simple_di::{builder::SimpleDiBuilder, ServiceProvider};
+Simple service dependency graph container implementation
 
+- Allow resolve nested service dependency graph
+
+- Support Transient
+- Support Singletone
+- Support Task local (`WIP`)
+- Support Thread local (`WIP`)
+
+- Allow to map service into any other representation as simple like `.map(|service| SomeOther { x: service.x })`
+- Allow to map service into trait object as siple like `.map::<dyn SomeTrait>()`
+
+- Resolve single (first) service by self or by any mapping
+- Resolve all service wich has requested representation, usefull for trait object (`WIP`)
+
+- Non blocking for transient, single lock for singletone init
+
+- Allow `!Send` + `!Sync` transient
+
+- Readable errors
+- Simple architecture (constructor -> scope -> mapping)
+
+- Allow global registration
+
+- Main test cases allowed in tests folder
+
+```rust
+use simple_di::builder::SimpleDiBuilder;
 use std::sync::{Arc, Mutex};
 
-use parking_lot::;
+pub trait ISomeTrait {
+    fn get(&self) -> String;
+}
 
-pub struct Service1 {
+pub struct SomeService {
     pub payload: String
 }
 
-pub struct Service2 {
-    pub payload: String
+pub struct SomeServiceDeep {
+    pub nested_service: Arc<Mutex<SomeService>>
 }
 
-let builder = SimpleDiBuilder::new();
+impl ISomeTrait for SomeServiceDeep {
+    fn get(&self) -> String {
+        self.nested_service.lock().unwrap().payload.clone()
+    }
+}
 
-builder.transient(|| Service1 {
-    payload: "1".to_string()
-});
+pub struct SomeServiceDeeper {
+    pub nested_service: SomeServiceDeep
+}
 
-builder.singletone(|| Arc::new(Mutex::new(Service2 {
-    payload: "2".to_string()
-})));
+fn main() {   
+    let builder = SimpleDiBuilder::new();
 
-builder.build();
+    // register singletone
+    builder.singletone(|_| Ok(Arc::new(Mutex::new(SomeService { payload: "1".to_string() }))));
 
-let mut service = ServiceProvider::resolve::<Service1>().unwrap();
-let mut service2 = ServiceProvider::resolve::<Arc<Mutex<Service2>>>().unwrap();
+    // register transient
+    builder.transient(|sp| Ok(SomeServiceDeeper { nested_service: sp.resolve()? }));
 
+    // register transient with mapping to trait
+    builder.transient(|sp| Ok(SomeServiceDeep { nested_service: sp.resolve()? }))
+        .map_as_trait::<dyn ISomeTrait>();
+
+    let sp = builder.build();
+
+    // automaticaly resolve all service dependency graph
+    // SomeServiceDeeper -> SomeServiceDeep -> Arc<Mutex<SomeService>>
+    let service = sp.resolve::<SomeServiceDeeper>().unwrap();
+
+    assert_eq!(service.nested_service.nested_service.lock().unwrap().payload, "1");
+
+    // change inner singletone
+    service.nested_service.nested_service.lock().unwrap().payload = "2".to_string();
+
+    // resolve dependency second time
+    // new SomeServiceDeeper and SomeServiceDeep, but old Arc<Mutex<SomeService>>
+    let service = sp.resolve::<SomeServiceDeeper>().unwrap();
+
+    assert_eq!(service.nested_service.nested_service.lock().unwrap().payload, "2");
+
+    // SomeServiceDeep also allowed as mapping into Box<dyn ISomeTrait>
+    let service = sp.resolve::<Box<dyn ISomeTrait>>().unwrap();
+
+    assert_eq!(service.get(), "2");
+}
 ```
