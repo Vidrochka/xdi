@@ -126,8 +126,8 @@ pub fn set_get_nested_transient_ok() {
     }));
 
     builder.transient(|sp| Ok(Service2 {
-        service1: sp.resolve().unwrap(),
-        service2: sp.resolve().unwrap(),
+        service1: sp.resolve()?,
+        service2: sp.resolve()?,
     }));
 
     let sp = builder.build();

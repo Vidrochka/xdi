@@ -1,9 +1,3 @@
-/*
-
-Scope layer apply scope filter (clone/build singletone, clone/build task, build transient)
-
-*/
-
 use std::mem;
 
 use ahash::AHashMap;
@@ -14,14 +8,16 @@ use crate::{types::{boxed_service::BoxedService, boxed_service_sync::SyncBoxedSe
 
 use super::service::{ServiceDescriptior, ServiceLayer};
 
+/// Scope layer apply scope filter (clone/build singletone, clone/build task, build transient)
 #[derive(Debug)]
-pub struct ScopeLayer {
+pub (crate) struct ScopeLayer {
     service_layer: ServiceLayer,
     scopes: AHashMap<TypeInfo, ServiceScopeDescriptior>,
 }
 
 impl ScopeLayer {
-    pub fn get(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
+    /// Get service throw scope layer
+    pub (crate) fn get(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         let scope = self.scopes.get(&ty).ok_or(ServiceBuildError::MappingNotFound)?;
 
         let service = self.service_layer.get(ty)?;
@@ -30,7 +26,7 @@ impl ScopeLayer {
         assert_eq!(scope.ty(), service.ty());
         
         match &scope.scope {
-            Scope::Transient => service.factory.build(sp),
+            Scope::Transient => service.factory().build(sp),
             Scope::Singletone(singletone_state) => {
                 let mut singletone_state_lock = singletone_state.lock();
 
@@ -40,7 +36,8 @@ impl ScopeLayer {
         }
     }
 
-    pub fn new(builder: ScopeLayerBuilder, service_layer: ServiceLayer) -> Self {
+    /// Create new scope layer
+    fn new(builder: ScopeLayerBuilder, service_layer: ServiceLayer) -> Self {
         ScopeLayer {
             service_layer,
             scopes: builder.scopes.into_iter().collect()
@@ -48,28 +45,32 @@ impl ScopeLayer {
     }
 }
 
+/// Service scope descriptor
 #[derive(Debug)]
-pub struct ServiceScopeDescriptior {
+struct ServiceScopeDescriptior {
     ty: TypeInfo,
     scope: Scope,
 }
 
 impl ServiceScopeDescriptior {
-    pub fn transient<TService: 'static>() -> Self {
+    /// Create new transient service scope descriptor
+    fn transient<TService: 'static>() -> Self {
         Self {
             ty: TService::type_info(),
             scope: Scope::Transient
         }
     }
 
-    pub fn task<TService: 'static>() -> Self {
+    /// Create new task local service scope descriptor
+    fn task<TService: 'static>() -> Self {
         Self {
             ty: TService::type_info(),
             scope: Scope::Task
         }
     }
 
-    pub fn singletone<TService: 'static + Sync + Send + Clone>() -> Self {
+    /// Create new singletone service scope descriptor
+    fn singletone<TService: 'static + Sync + Send + Clone>() -> Self {
         Self {
             ty: TService::type_info(),
             scope: Scope::Singletone(
@@ -107,26 +108,31 @@ impl ServiceScopeDescriptior {
         }
     }
 
-    pub fn ty(&self) -> TypeInfo {
+    /// Get service scope type info
+    fn ty(&self) -> TypeInfo {
         self.ty
     }
 }
 
+/// Service scope kinds
 #[derive(Debug)]
-pub enum Scope {
+enum Scope {
     Transient,
     // TODO: возможно стоит переделать на RwLock, пока непонятно на сколько такое усложнение обосновано
     Singletone(Mutex<SingletoneProducer>),
     Task,
 }
 
+/// Syncer - Замыкание для конвертации !sync объекта в sync (требуется для sync замыкания разделителя singletone)
 type Syncer = Box<dyn Fn(BoxedService) -> ServiceBuildResult<SyncBoxedService> + Send + Sync>;
+/// Syncer - Замыкание для конвертации sync объекта в !sync (требуется для sync замыкания разделителя singletone)
 type UnSyncer = Box<dyn Fn(SyncBoxedService) -> ServiceBuildResult<BoxedService> + Send + Sync>;
+/// SingletoneSplitter - Замыкание для разделения объекта на два (требуется для singletone). Треьует sync сервис чтобы быть sync 
 type SingletoneSplitter = Box<dyn Fn(SyncBoxedService) -> ServiceBuildResult<(SyncBoxedService, SyncBoxedService)> + Send + Sync>;
 
-pub enum SingletoneProducer {
+/// Singletone state
+enum SingletoneProducer {
     Pending {
-        // syncer и unsyncer нужны чтобы в SingletoneProducer хранить ссылку как sync + send, но не заставлять service слой зависить от этого
         syncer: Syncer,
         splitter: SingletoneSplitter,
         unsyncer: UnSyncer,
@@ -140,16 +146,19 @@ pub enum SingletoneProducer {
 }
 
 impl SingletoneProducer {
-    pub fn pending(&self) -> bool {
+    /// Check if singletone is pending
+    #[allow(unused)]
+    fn pending(&self) -> bool {
         matches!(self, Self::Pending { .. })
     }
 
-    pub fn build(&mut self, service_descriptor: ServiceDescriptior, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
+    /// Create new singletone instance
+    fn build(&mut self, service_descriptor: ServiceDescriptior, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         let old_val = mem::replace(self, Self::Empty);
 
         match old_val {
             SingletoneProducer::Pending { syncer, splitter, unsyncer, } => {
-                let service = service_descriptor.factory.build(sp)?;
+                let service = service_descriptor.factory().build(sp)?;
 
                 let service = syncer(service)?;
 
@@ -194,28 +203,29 @@ impl std::fmt::Debug for SingletoneProducer {
 }
 
 #[derive(Debug)]
-pub struct ScopeLayerBuilder {
+pub (crate) struct ScopeLayerBuilder {
     scopes: DashMap<TypeInfo, ServiceScopeDescriptior, ahash::RandomState>,
 }
 
 impl ScopeLayerBuilder {
-    pub fn new() -> Self {
+    pub (crate) fn new() -> Self {
         Self { scopes: Default::default() }
     }
 
-    pub fn add_transient<TService: 'static>(&self) {
+    pub (crate) fn add_transient<TService: 'static>(&self) {
         self.scopes.insert(TService::type_info(), ServiceScopeDescriptior::transient::<TService>());
     }
 
-    pub fn add_singletone<TService: 'static + Send + Sync + Clone>(&self) {
+    pub (crate) fn add_singletone<TService: 'static + Send + Sync + Clone>(&self) {
         self.scopes.insert(TService::type_info(), ServiceScopeDescriptior::singletone::<TService>());
     }
 
-    pub fn add_task<TService: 'static>(&self) {
+    #[allow(unused)]
+    pub (crate) fn add_task<TService: 'static>(&self) {
         self.scopes.insert(TService::type_info(), ServiceScopeDescriptior::task::<TService>());
     }
     
-    pub fn build(self, service_layer: ServiceLayer) -> ScopeLayer {
+    pub (crate) fn build(self, service_layer: ServiceLayer) -> ScopeLayer {
         ScopeLayer::new(self, service_layer)
     }
 }

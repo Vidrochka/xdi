@@ -22,13 +22,13 @@ use crate::{types::{boxed_service::BoxedService, error::{ServiceBuildError, Serv
 use super::scope::ScopeLayer;
 
 #[derive(Debug)]
-pub struct MappingLayer {
+pub (crate) struct MappingLayer {
     scope_layer: ScopeLayer,
     mappings: AHashMap<TypeInfo, Vec<MappingDescriptor>>
 }
 
 impl MappingLayer {
-    pub fn resolve_raw(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
+    pub (crate) fn resolve_raw(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         let mapping = self.mappings.get(&ty)
             .and_then(|x| x.first())
             .ok_or(ServiceBuildError::MappingNotFound)?;
@@ -41,7 +41,7 @@ impl MappingLayer {
         mapping.mapper.map(service)
     }
 
-    pub fn resolve<TService: 'static>(&self, sp: ServiceProvider) -> ServiceBuildResult<TService> {
+    pub (crate) fn resolve<TService: 'static>(&self, sp: ServiceProvider) -> ServiceBuildResult<TService> {
         let ty = TService::type_info();
 
         let service = self.resolve_raw(ty, sp)?;
@@ -53,7 +53,7 @@ impl MappingLayer {
             })
     }
 
-    pub fn new(builder: MappingLayerBuilder, scope_layer: ScopeLayer) -> Self {
+    fn new(builder: MappingLayerBuilder, scope_layer: ScopeLayer) -> Self {
         MappingLayer {
             scope_layer,
             mappings: builder.mappings.into_iter().collect()
@@ -61,19 +61,21 @@ impl MappingLayer {
     }
 }
 
+/// Mapping descriptor
 #[derive(Debug)]
-pub struct MappingDescriptor {
+struct MappingDescriptor {
     src_ty: TypeInfo,
     dest_ty: TypeInfo,
     mapper: ServiceMapper,
 }
 
 impl MappingDescriptor {
-    pub fn new<TSrc: 'static, TDst: 'static>(mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Send + Sync + 'static) -> Self {
+    /// Create new mapping descriptor
+    fn new<TSrc: 'static, TDst: 'static>(mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Send + Sync + 'static) -> Self {
         Self {
             src_ty: TSrc::type_info(),
             dest_ty: TDst::type_info(),
-            mapper: ServiceMapper(Box::new(move |service| {
+            mapper: ServiceMapper::new(Box::new(move |service: BoxedService| {
                 let service = service.unbox::<TSrc>()
                     .map_err(|e| ServiceBuildError::InvalidMappingLayerBoxedInputType {
                         expected: TSrc::type_info(),
@@ -87,23 +89,28 @@ impl MappingDescriptor {
         }
     }
     
-    pub fn src_ty(&self) -> TypeInfo {
+    /// Get source type info
+    fn src_ty(&self) -> TypeInfo {
         self.src_ty
     }
     
-    pub fn dest_ty(&self) -> TypeInfo {
+    /// Get destination type info
+    fn dest_ty(&self) -> TypeInfo {
         self.dest_ty
     }
 }
 
-pub struct ServiceMapper(Box<dyn Fn(BoxedService) -> ServiceBuildResult<BoxedService> + Send + Sync>);
+/// Service mapper. Map service to another service
+struct ServiceMapper(Box<dyn Fn(BoxedService) -> ServiceBuildResult<BoxedService> + Send + Sync>);
 
 impl ServiceMapper {
-    pub fn new(converter: impl Fn(BoxedService) -> ServiceBuildResult<BoxedService> + 'static + Send + Sync) -> Self {
+    /// Create new service mapper
+    fn new(converter: impl Fn(BoxedService) -> ServiceBuildResult<BoxedService> + 'static + Send + Sync) -> Self {
         Self(Box::new(converter))
     }
 
-    pub fn map(&self, service: BoxedService) -> ServiceBuildResult<BoxedService> {
+    /// Map service to another service
+    fn map(&self, service: BoxedService) -> ServiceBuildResult<BoxedService> {
         (self.0)(service)
     }
 }
@@ -115,16 +122,16 @@ impl std::fmt::Debug for ServiceMapper {
 }
 
 #[derive(Debug)]
-pub struct MappingLayerBuilder {
+pub (crate) struct MappingLayerBuilder {
     mappings: DashMap<TypeInfo, Vec<MappingDescriptor>, ahash::RandomState>,
 }
 
 impl MappingLayerBuilder {
-    pub fn new() -> Self {
+    pub (crate) fn new() -> Self {
         Self { mappings: Default::default() }
     }
 
-    pub fn add_mapping<TSrc: 'static, TDst: 'static>(&self, mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Sync + Send + 'static) {
+    pub (crate) fn add_mapping<TSrc: 'static, TDst: 'static>(&self, mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Sync + Send + 'static) {
         match self.mappings.entry(TDst::type_info()) {
             dashmap::Entry::Occupied(mut occupied_entry) => {
                 occupied_entry.get_mut().push(MappingDescriptor::new::<TSrc, TDst>(mapper));
@@ -135,7 +142,7 @@ impl MappingLayerBuilder {
         };
     }
 
-    pub fn build(self, scope_layer: ScopeLayer) -> MappingLayer {
+    pub (crate) fn build(self, scope_layer: ScopeLayer) -> MappingLayer {
         MappingLayer::new(self, scope_layer)
     }
 }
