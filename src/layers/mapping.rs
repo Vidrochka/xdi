@@ -1,19 +1,3 @@
-/*
-
-Mapping allow convert any type to any other type
-
-Example:
-
-struct T {}
-
-trait Tr {}
-
-impl Tr for T {}
-
-Then in abstraction convert service T to Box<dyn Tr>
-
-*/
-
 use ahash::AHashMap;
 use dashmap::DashMap;
 
@@ -21,6 +5,11 @@ use crate::{types::{boxed_service::BoxedService, error::{ServiceBuildError, Serv
 
 use super::scope::ScopeLayer;
 
+
+/// Mapping allow convert any type to any other type
+/// 
+/// - Service to another service
+/// - Service to trait object
 #[derive(Debug)]
 pub (crate) struct MappingLayer {
     scope_layer: ScopeLayer,
@@ -28,6 +17,7 @@ pub (crate) struct MappingLayer {
 }
 
 impl MappingLayer {
+    /// Resolve service by type info
     pub (crate) fn resolve_raw(&self, ty: TypeInfo, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         let mapping = self.mappings.get(&ty)
             .and_then(|x| x.first())
@@ -41,6 +31,7 @@ impl MappingLayer {
         mapping.mapper.map(service)
     }
 
+    /// Resolve service by type
     pub (crate) fn resolve<TService: 'static>(&self, sp: ServiceProvider) -> ServiceBuildResult<TService> {
         let ty = TService::type_info();
 
@@ -131,6 +122,7 @@ impl MappingLayerBuilder {
         Self { mappings: Default::default() }
     }
 
+    /// Add new mapping
     pub (crate) fn add_mapping<TSrc: 'static, TDst: 'static>(&self, mapper: impl Fn(TSrc) -> ServiceBuildResult<TDst> + Sync + Send + 'static) {
         match self.mappings.entry(TDst::type_info()) {
             dashmap::Entry::Occupied(mut occupied_entry) => {
@@ -142,6 +134,7 @@ impl MappingLayerBuilder {
         };
     }
 
+    /// Build mapping layer
     pub (crate) fn build(self, scope_layer: ScopeLayer) -> MappingLayer {
         MappingLayer::new(self, scope_layer)
     }
