@@ -1,2 +1,2 @@
-pub mod transient;
 pub mod singletone;
+pub mod transient;

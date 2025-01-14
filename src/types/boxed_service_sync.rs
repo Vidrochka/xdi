@@ -10,17 +10,23 @@ pub struct SyncBoxedService {
 
 impl SyncBoxedService {
     pub fn new<TService: 'static + Send + Sync>(service: TService) -> Self {
-        Self { service: Box::new(service), ty: TService::type_info() }
+        Self {
+            service: Box::new(service),
+            ty: TService::type_info(),
+        }
     }
 
     pub fn unbox<TService: 'static>(self) -> Result<TService, Self> {
         match self.service.downcast() {
             Ok(service) => Ok(*service),
-            Err(service) => Err(SyncBoxedService { service, ty: self.ty }),
+            Err(service) => Err(SyncBoxedService {
+                service,
+                ty: self.ty,
+            }),
         }
     }
 
     pub fn ty(&self) -> TypeInfo {
         self.ty
-    } 
+    }
 }

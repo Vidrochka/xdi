@@ -1,4 +1,4 @@
-use std::any::{type_name, TypeId};
+use std::any::{TypeId, type_name};
 
 #[derive(Debug, Clone, Copy, Eq, PartialOrd, Ord)]
 pub struct TypeInfo {

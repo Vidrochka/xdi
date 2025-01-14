@@ -3,63 +3,79 @@ use std::{fmt::Debug, sync::Arc};
 use ahash::AHashMap;
 use dashmap::DashMap;
 
-use crate::{types::{boxed_service::BoxedService, error::{ServiceBuildError, ServiceBuildResult}, type_info::{TypeInfo, TypeInfoSource}}, ServiceProvider};
+use crate::{
+    ServiceProvider,
+    types::{
+        boxed_service::BoxedService,
+        error::{ServiceBuildError, ServiceBuildResult},
+        type_info::{TypeInfo, TypeInfoSource},
+    },
+};
 
 /// Service layer contain basic build info (constructor)
 #[derive(Debug)]
-pub (crate) struct ServiceLayer {
-    services: AHashMap<TypeInfo, ServiceDescriptior>
+pub(crate) struct ServiceLayer {
+    services: AHashMap<TypeInfo, ServiceDescriptior>,
 }
 
 impl ServiceLayer {
     /// Get service descriptor
-    pub (crate) fn get(&self, ty: TypeInfo) -> ServiceBuildResult<ServiceDescriptior> {
-        self.services.get(&ty).cloned().ok_or(ServiceBuildError::ServiceNotDound)
+    pub(crate) fn get(&self, ty: TypeInfo) -> ServiceBuildResult<ServiceDescriptior> {
+        self.services
+            .get(&ty)
+            .cloned()
+            .ok_or(ServiceBuildError::ServiceNotDound)
     }
 
     /// Create new service layer
     fn new(builder: ServiceLayerBuilder) -> Self {
         ServiceLayer {
-            services: builder.services.into_iter().collect()
+            services: builder.services.into_iter().collect(),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub (crate) struct ServiceDescriptior {
+pub(crate) struct ServiceDescriptior {
     ty: TypeInfo,
     factory: ServiceFactory,
 }
 
 impl ServiceDescriptior {
     /// Create new service descriptor from function factory
-    fn from_factory<TService: 'static>(factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static) -> Self {
+    fn from_factory<TService: 'static>(
+        factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
+    ) -> Self {
         Self {
             ty: TService::type_info(),
-            factory: ServiceFactory(Arc::new(move |sp: ServiceProvider| -> ServiceBuildResult<BoxedService> {
-                let service = factory(sp)?;
-                Ok(BoxedService::new(service))
-            }))
+            factory: ServiceFactory(Arc::new(
+                move |sp: ServiceProvider| -> ServiceBuildResult<BoxedService> {
+                    let service = factory(sp)?;
+                    Ok(BoxedService::new(service))
+                },
+            )),
         }
     }
-    
+
     /// Get service type info
-    pub (crate) fn ty(&self) -> TypeInfo {
+    pub(crate) fn ty(&self) -> TypeInfo {
         self.ty
     }
-    
-    pub (crate) fn factory(&self) -> &ServiceFactory {
+
+    pub(crate) fn factory(&self) -> &ServiceFactory {
         &self.factory
     }
 }
 
 /// Service factory (constructor)
 #[derive(Clone)]
-pub (crate) struct ServiceFactory(Arc<dyn Fn(ServiceProvider) -> ServiceBuildResult<BoxedService> + Sync + Send>);
+pub(crate) struct ServiceFactory(
+    Arc<dyn Fn(ServiceProvider) -> ServiceBuildResult<BoxedService> + Sync + Send>,
+);
 
 impl ServiceFactory {
     /// Build new service
-    pub (crate) fn build(&self, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
+    pub(crate) fn build(&self, sp: ServiceProvider) -> ServiceBuildResult<BoxedService> {
         (self.0)(sp)
     }
 }
@@ -71,23 +87,25 @@ impl Debug for ServiceFactory {
 }
 
 /// Builder for service layer
-#[derive(Debug)]
-pub (crate) struct ServiceLayerBuilder {
+#[derive(Debug, Default)]
+pub(crate) struct ServiceLayerBuilder {
     services: DashMap<TypeInfo, ServiceDescriptior, ahash::RandomState>,
 }
 
 impl ServiceLayerBuilder {
-    pub (crate) fn new() -> Self {
-        Self { services: Default::default() }
-    }
-
     /// Add new service
-    pub (crate) fn add_service<TService: 'static>(&self, factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static) {
-        self.services.insert(TService::type_info(), ServiceDescriptior::from_factory(factory));
+    pub(crate) fn add_service<TService: 'static>(
+        &self,
+        factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
+    ) {
+        self.services.insert(
+            TService::type_info(),
+            ServiceDescriptior::from_factory(factory),
+        );
     }
 
     /// Build service layer
-    pub (crate) fn build(self) -> ServiceLayer {
+    pub(crate) fn build(self) -> ServiceLayer {
         ServiceLayer::new(self)
     }
 }
