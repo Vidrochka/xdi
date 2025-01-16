@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use layers::mapping::MappingLayer;
+use layers::{mapping::MappingLayer, scope::task_local::TaskLocalCtx};
 use types::{boxed_service::BoxedService, error::ServiceBuildResult, type_info::TypeInfo};
 
 pub mod builder;
@@ -18,7 +18,7 @@ static SERVICE_PROVIDER: OnceLock<ServiceProvider> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct ServiceProvider {
-    mapping_layer: Arc<MappingLayer>,
+    pub(crate) mapping_layer: Arc<MappingLayer>,
 }
 
 impl ServiceProvider {
@@ -44,5 +44,23 @@ impl ServiceProvider {
 
     pub fn install_global(self) {
         SERVICE_PROVIDER.set(self).unwrap();
+    }
+
+    pub async fn async_task_span<F: Future>(f: F) -> F::Output {
+        TaskLocalCtx::span(f).await
+    }
+}
+
+pub trait IAsyncTaskScope {
+    type TFutRes;
+
+    fn add_service_span(self) -> impl Future<Output = Self::TFutRes>;
+}
+
+impl<TFut: Future> IAsyncTaskScope for TFut {
+    type TFutRes = TFut::Output;
+
+    fn add_service_span(self) -> impl Future<Output = Self::TFutRes> {
+        ServiceProvider::async_task_span(self)
     }
 }

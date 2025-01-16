@@ -18,7 +18,7 @@ use super::scope::ScopeLayer;
 /// - Service to trait object
 #[derive(Debug)]
 pub(crate) struct MappingLayer {
-    scope_layer: ScopeLayer,
+    pub(crate) scope_layer: ScopeLayer,
     mappings: AHashMap<TypeInfo, Vec<MappingDescriptor>>,
 }
 
@@ -33,7 +33,7 @@ impl MappingLayer {
             .mappings
             .get(&ty)
             .and_then(|x| x.first())
-            .ok_or(ServiceBuildError::MappingNotFound)?;
+            .ok_or(ServiceBuildError::MappingNotFound { ty })?;
 
         let service = self.scope_layer.get(mapping.src_ty(), sp)?;
 
@@ -69,7 +69,7 @@ impl MappingLayer {
         let mappings = self
             .mappings
             .get(&ty)
-            .ok_or(ServiceBuildError::MappingNotFound)?;
+            .ok_or(ServiceBuildError::MappingNotFound { ty })?;
 
         mappings
             .iter()

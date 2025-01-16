@@ -5,11 +5,11 @@ use super::type_info::TypeInfo;
 #[derive(Debug, Error)]
 pub enum ServiceBuildError {
     #[error("Service not found")]
-    ServiceNotDound,
+    ServiceNotDound { ty: TypeInfo },
     #[error("Scope not found")]
-    ScopeNotFound,
+    ScopeNotFound { ty: TypeInfo },
     #[error("Mapping not found")]
-    MappingNotFound,
+    MappingNotFound { ty: TypeInfo },
 
     #[error("Invalid mapping layer boxed input type. Expected {expected:?} found {found:?}")]
     InvalidMappingLayerBoxedInputType { expected: TypeInfo, found: TypeInfo },
@@ -25,6 +25,9 @@ pub enum ServiceBuildError {
 
     #[error(transparent)]
     Custom(#[from] anyhow::Error),
+
+    #[error("Task context not initialized while resolve {ty:?}")]
+    TaskContextNotInitialized { ty: TypeInfo },
 }
 
 pub type ServiceBuildResult<TRes> = Result<TRes, ServiceBuildError>;

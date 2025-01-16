@@ -6,7 +6,7 @@ Simple service dependency graph container implementation
 
 - Support Transient
 - Support Singletone
-- Support Task local (`WIP`)
+- Support Task local
 - Support Thread local (`WIP`)
 
 - Allow to map service into any other representation as simple like `.map(|service| SomeOther { x: service.x })`
@@ -119,23 +119,32 @@ builder.transient(|sp: ServiceProvider| Ok(SomeService {
 ```
 
 ##### As singletone  
-- Lazy created by first access and return clone every call
+- Lazy creation on the first invocation and return a clone on every next invocation
 - Singletone required clone for service (you can wrap to Arc or derive Clone)
 - Singletone required Sync + Send because it can be shared anywhere
 
 ```rust
 
-builder.singletone(|sp: ServiceProvider| Ok(SomeService {
+builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
     //... some initialization
 }));
 ```
 
 ##### As task local
-- Lazy created by first access in task and return clone every call from task
-- WIP
+- Lazy creation on the first invocation from the task scope and return a clone on every next invocation in same task scope
+- Task local required clone for service (you can wrap to Arc or derive Clone)
+- Task local required Sync + Send because it can be shared anywhere
+
+```rust
+builder.task_local(|_sp: ServiceProvider| Ok(SomeService {
+    //... some initialization
+}));
+```
 
 ##### As thread local
-- Lazy created by first access in thread and return clone every call from thread
+- Lazy creation on the first invocation from the thread scope and return a clone on every next invocation in same thread scope
+- Task local required clone for service (you can wrap to Arc or derive Clone)
+- Task local required Sync + Send because it can be shared anywhere
 - WIP
 
 
@@ -217,4 +226,21 @@ let services: Vec<Box<dyn ISomeTrait>> = sp.resolve_all().unwrap();
 use simple_di::types::type_info::TypeInfoSource;
 
 let services: Vec<BoxedService> = sp.resolve_all_raw(Box<dyn ISomeTrait>::type_info()).unwrap();
+```
+
+##### As dependency in task scope
+
+```rust
+
+tokio::spawn(async move {
+    let service = sp.resolve::<SomeService>().unwrap();
+
+    // In second time resolve return instanse clone (like singletone)
+    let service = sp.resolve::<SomeService>().unwrap();
+}.add_service_span())
+
+tokio::spawn(async move {
+    // New task has own SomeService instance
+    let service = sp.resolve::<SomeService>().unwrap();
+}.add_service_span())
 ```

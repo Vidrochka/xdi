@@ -119,6 +119,69 @@ impl SimpleDiBuilder {
         SimpleDiBuilderService::new(self)
     }
 
+    /// Register scoped service
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use simple_di::{builder::SimpleDiBuilder, IAsyncTaskScope};
+    /// use std::sync::{Arc, Mutex};
+    ///
+    /// #[derive(Clone)]
+    /// pub struct SomeService {
+    ///   pub payload: Arc<Mutex<String>>
+    /// }
+    ///
+    /// let runtime = tokio::runtime::Builder::new_multi_thread()
+    ///     .worker_threads(4)
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let builder = SimpleDiBuilder::new();
+    ///
+    /// builder.task_local(|_| Ok(SomeService { payload: Arc::new(Mutex::new("1".to_string())) }));
+    ///
+    /// let sp = builder.build();
+    ///
+    /// {
+    ///     let sp = sp.clone();
+    ///
+    ///     let task = async move {
+    ///         let service = sp.resolve::<SomeService>().unwrap();
+    ///
+    ///         assert_eq!(*service.payload.lock().unwrap(), "1");
+    ///
+    ///         *service.payload.lock().unwrap() = "2".to_string();
+    ///
+    ///         let service = sp.resolve::<SomeService>().unwrap();
+    ///
+    ///         assert_eq!(*service.payload.lock().unwrap(), "2");
+    ///     }.add_service_span();
+    ///
+    ///     runtime.block_on(task);
+    /// }
+    ///
+    /// let task = runtime.spawn(async move {
+    ///     let service = sp.resolve::<SomeService>().unwrap();
+    ///
+    ///     assert_eq!(*service.payload.lock().unwrap(), "1");
+    /// }.add_service_span());
+    ///
+    /// runtime.block_on(task).unwrap();
+    ///
+    /// ```
+    pub fn task_local<TService: Send + Sync + Clone + 'static>(
+        &self,
+        factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
+    ) -> SimpleDiBuilderService<TService> {
+        self.service_layer.add_service(factory);
+        self.scope_layer.add_task::<TService>();
+        self.mapping_layer
+            .add_mapping::<TService, TService>(|x| Ok(x));
+
+        SimpleDiBuilderService::new(self)
+    }
+
     /// Build service provider
     ///
     /// # Example

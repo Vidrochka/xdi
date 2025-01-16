@@ -24,7 +24,7 @@ impl ServiceLayer {
         self.services
             .get(&ty)
             .cloned()
-            .ok_or(ServiceBuildError::ServiceNotDound)
+            .ok_or(ServiceBuildError::ServiceNotDound { ty })
     }
 
     /// Create new service layer
