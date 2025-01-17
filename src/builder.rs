@@ -119,7 +119,7 @@ impl SimpleDiBuilder {
         SimpleDiBuilderService::new(self)
     }
 
-    /// Register scoped service
+    /// Register task scoped service
     ///
     /// # Example
     ///
@@ -175,7 +175,62 @@ impl SimpleDiBuilder {
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
     ) -> SimpleDiBuilderService<TService> {
         self.service_layer.add_service(factory);
-        self.scope_layer.add_task::<TService>();
+        self.scope_layer.add_task_local::<TService>();
+        self.mapping_layer
+            .add_mapping::<TService, TService>(|x| Ok(x));
+
+        SimpleDiBuilderService::new(self)
+    }
+
+    /// Register thread scoped service
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use simple_di::builder::SimpleDiBuilder;
+    /// use std::{rc::Rc, sync::Mutex, thread};
+    ///
+    /// #[derive(Clone)]
+    /// pub struct SomeService {
+    ///   pub payload: Rc<Mutex<String>>
+    /// }
+    ///
+    /// let builder = SimpleDiBuilder::new();
+    ///
+    /// builder.thread_local(|_| Ok(SomeService { payload: Rc::new(Mutex::new("1".to_string())) }));
+    ///
+    /// let sp = builder.build();
+    ///
+    /// {
+    ///     let sp = sp.clone();
+    ///
+    ///     thread::spawn(move || {
+    ///         let service = sp.resolve::<SomeService>().unwrap();
+    ///
+    ///         assert_eq!(*service.payload.lock().unwrap(), "1");
+    ///
+    ///         *service.payload.lock().unwrap() = "2".to_string();
+    ///
+    ///         let service = sp.resolve::<SomeService>().unwrap();
+    ///
+    ///         assert_eq!(*service.payload.lock().unwrap(), "2");
+    ///     }).join().unwrap();
+    ///
+    /// }
+    ///
+    /// thread::spawn(move || {
+    ///     let service = sp.resolve::<SomeService>().unwrap();
+    ///
+    ///     assert_eq!(*service.payload.lock().unwrap(), "1");
+    /// }).join().unwrap();
+    ///
+    /// ```
+    pub fn thread_local<TService: Clone + 'static>(
+        &self,
+        factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
+    ) -> SimpleDiBuilderService<TService> {
+        self.service_layer.add_service(factory);
+        self.scope_layer.add_thread_local::<TService>();
         self.mapping_layer
             .add_mapping::<TService, TService>(|x| Ok(x));
 

@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, OnceLock};
 
-use layers::{mapping::MappingLayer, scope::task_local::TaskLocalCtx};
+use layers::{mapping::MappingLayer, scope::TaskLocalCtx};
 use types::{boxed_service::BoxedService, error::ServiceBuildResult, type_info::TypeInfo};
 
 pub mod builder;

@@ -26,8 +26,11 @@ pub enum ServiceBuildError {
     #[error(transparent)]
     Custom(#[from] anyhow::Error),
 
-    #[error("Task context not initialized while resolve {ty:?}")]
-    TaskContextNotInitialized { ty: TypeInfo },
+    #[error("Task local context not initialized while resolve {ty:?}")]
+    TaskLocalContextNotInitialized { ty: TypeInfo },
+
+    #[error("Thread local context not initialized while resolve {ty:?}")]
+    ThreadLocalContextNotInitialized { ty: TypeInfo },
 }
 
 pub type ServiceBuildResult<TRes> = Result<TRes, ServiceBuildError>;

@@ -6,23 +6,23 @@ Simple service dependency graph container implementation
 
 - Support Transient
 - Support Singletone
-- Support Task local
-- Support Thread local (`WIP`)
+- Support Task local (singletone in task scope)
+- Support Thread local (singletone in thread scope)
 
-- Allow to map service into any other representation as simple like `.map(|service| SomeOther { x: service.x })`
-- Allow to map service into trait object as siple like `.map::<dyn SomeTrait>()`
+- Allow to map service into any other representation as simple like `.map_as(|service| SomeOther { x: service.x })`
+- Allow to map service into trait object as siple like `.map_as_trait::<dyn SomeTrait>()`
 
 - Resolve single (first) service by self or by any mapping
 - Resolve all service wich has requested representation, usefull for trait object
 
-- Non blocking for transient, single lock for singletone init
+- Non blocking for transient, single lock for singletone/task_local/thread_local init
 
-- Allow `!Send` + `!Sync` transient
+- Allow `!Send` + `!Sync` for transient and thread_local
 
 - Readable errors
 - Simple architecture (constructor -> scope -> mapping)
 
-- Allow global registration
+- Allow global `ServiceProvider` registration
 
 - Main test cases allowed in tests folder
 
@@ -112,6 +112,15 @@ let builder = SimpleDiBuilder::new();
 
 ```rust
 
+pub struct SomeNestedService {}
+
+pub struct SomeService {
+    service: SomeNestedService,
+    //... other fields
+}
+
+builder.transient(|_sp: ServiceProvider| Ok(SomeNestedService {}))
+
 builder.transient(|sp: ServiceProvider| Ok(SomeService {
     //... some initialization
     some_field: sp.resolve::<SomeNestedService>(),
@@ -125,6 +134,9 @@ builder.transient(|sp: ServiceProvider| Ok(SomeService {
 
 ```rust
 
+#[derive(Clone)]
+pub struct SomeService {}
+
 builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
     //... some initialization
 }));
@@ -136,6 +148,10 @@ builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
 - Task local required Sync + Send because it can be shared anywhere
 
 ```rust
+
+#[derive(Clone)]
+pub struct SomeService {}
+
 builder.task_local(|_sp: ServiceProvider| Ok(SomeService {
     //... some initialization
 }));
@@ -143,9 +159,17 @@ builder.task_local(|_sp: ServiceProvider| Ok(SomeService {
 
 ##### As thread local
 - Lazy creation on the first invocation from the thread scope and return a clone on every next invocation in same thread scope
-- Task local required clone for service (you can wrap to Arc or derive Clone)
-- Task local required Sync + Send because it can be shared anywhere
-- WIP
+- Thread local required clone for service (you can wrap to Rc or derive Clone)
+- Allowed !Send + !Sync
+
+```rust
+#[derive(Clone)]
+pub struct SomeService {}
+
+builder.thread_local(|_sp: ServiceProvider| Ok(SomeService {
+    //... some initialization
+}));
+```
 
 
 ### Map service
