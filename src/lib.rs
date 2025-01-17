@@ -4,7 +4,9 @@
 
 use std::sync::{Arc, OnceLock};
 
-use layers::{mapping::MappingLayer, scope::TaskLocalCtx};
+#[cfg(feature = "task-local")]
+use layers::scope::TaskLocalCtx;
+use layers::mapping::MappingLayer;
 use types::{boxed_service::BoxedService, error::ServiceBuildResult, type_info::TypeInfo};
 
 pub mod builder;
@@ -46,17 +48,20 @@ impl ServiceProvider {
         SERVICE_PROVIDER.set(self).unwrap();
     }
 
+    #[cfg(feature = "task-local")]
     pub async fn async_task_span<F: Future>(f: F) -> F::Output {
         TaskLocalCtx::span(f).await
     }
 }
 
+#[cfg(feature = "task-local")]
 pub trait IAsyncTaskScope {
     type TFutRes;
 
     fn add_service_span(self) -> impl Future<Output = Self::TFutRes>;
 }
 
+#[cfg(feature = "task-local")]
 impl<TFut: Future> IAsyncTaskScope for TFut {
     type TFutRes = TFut::Output;
 

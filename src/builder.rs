@@ -119,6 +119,7 @@ impl SimpleDiBuilder {
         SimpleDiBuilderService::new(self)
     }
 
+    #[cfg(feature = "task-local")]
     /// Register task scoped service
     ///
     /// # Example
