@@ -2,6 +2,12 @@
 name = "simple-di"
 version = "0.1.0"
 edition = "2024"
+authors = ["Vidrochka <Evgenuy1605@yandex.ru>"]
+description = "Rust di containers system"
+license = "MIT"
+homepage = "https://github.com/Vidrochka/simple-di"
+repository = "https://github.com/Vidrochka/simple-di"
+keywords = ["simple", "di", "ioc", "simple-di", "dependency-injection"]
 
 [dependencies]
 dashmap = "6"
