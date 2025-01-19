@@ -1,3 +1,4 @@
+
 # xdi
 
 Simple service dependency graph container implementation
@@ -96,10 +97,9 @@ fn main() {
 Create container builder
 
 ```rust
-
 let builder = DiBuilder::new();
 // or
-// let builder = DiBuilder::default();
+let builder = DiBuilder::default();
 ```
 
 ### Register the service
@@ -111,19 +111,16 @@ let builder = DiBuilder::new();
 - Allowed !Send + !Sync
 
 ```rust
+pub struct DbConnection {}
 
-pub struct SomeNestedService {}
-
-pub struct SomeService {
-    service: SomeNestedService,
-    //... other fields
+pub struct Repository {
+    conn: DbConnection,
 }
 
-builder.transient(|_sp: ServiceProvider| Ok(SomeNestedService {}))
+builder.transient(|_sp: ServiceProvider| Ok(DbConnection {}));
 
-builder.transient(|sp: ServiceProvider| Ok(SomeService {
-    //... some initialization
-    some_field: sp.resolve::<SomeNestedService>(),
+builder.transient(|sp: ServiceProvider| Ok(Repository {
+    conn: sp.resolve::<DbConnection>()?,
 }));
 ```
 
@@ -133,7 +130,6 @@ builder.transient(|sp: ServiceProvider| Ok(SomeService {
 - Singletone required Sync + Send because it can be shared anywhere
 
 ```rust
-
 #[derive(Clone)]
 pub struct SomeService {}
 
@@ -148,13 +144,15 @@ builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
 - Task local required Sync + Send because it can be shared anywhere
 
 ```rust
-
-#[derive(Clone)]
-pub struct SomeService {}
-
-builder.task_local(|_sp: ServiceProvider| Ok(SomeService {
-    //... some initialization
-}));
+#[cfg(feature = "task-local")]
+{
+    #[derive(Clone)]
+    pub struct SomeService {}
+    
+    builder.task_local(|_sp: ServiceProvider| Ok(SomeService {
+        //... some initialization
+    }));
+}
 ```
 
 ##### As thread local
@@ -180,22 +178,32 @@ builder.thread_local(|_sp: ServiceProvider| Ok(SomeService {
 ##### Custom map
 
 ```rust
+pub struct DbConnectionInner {}
 
-    builder.transient(|_| Ok(SomeService {
-        //... some initialization
-    }))
-    .map_as(|some_service| Ok(OtherService { some_field: x.some_field }));
+pub struct DbConnectionPool {}
+
+impl DbConnectionPool {
+   fn get(&self) -> DbConnectionInner { DbConnectionInner {} }
+}
+
+pub struct DbConnection {
+    conn: DbConnectionInner,
+}
+
+builder.transient(|_sp: ServiceProvider| Ok(DbConnectionPool {
+    //... some initialization
+}))
+.map_as(|pool| Ok(DbConnection { conn: pool.get() }));
 ```
 
 ##### Trait object map
 - Create mapping to `Box<dyn ISomeTrait>` if service impl ISomeTrait
 
 ```rust
-
-    builder.transient(|_| Ok(SomeService {
-        //... some initialization
-    }))
-    .map_as_trait::<dyn ISomeTrait>();
+builder.transient(|_sp: ServiceProvider| Ok(SomeService {
+    //... some initialization
+}))
+.map_as_trait::<dyn ISomeTrait>();
 ```
 
 ### Build container
@@ -204,7 +212,6 @@ builder.thread_local(|_sp: ServiceProvider| Ok(SomeService {
 ##### Build container as var
 
 ```rust
-
 let sp = builder.build();
 ```
 
@@ -214,7 +221,7 @@ let sp = builder.build();
 builder.build_global();
 
 // then access by static global var
-let service = ServiceProvider::get().unwrap().resolve::<SomeService>().unwrap()
+let service = ServiceProvider::get().unwrap().resolve::<SomeService>().unwrap();
 ```
 
 ### Resolve service by mapping
@@ -222,7 +229,6 @@ let service = ServiceProvider::get().unwrap().resolve::<SomeService>().unwrap()
 ##### As service
 
 ```rust
-
 let service: SomeService = sp.resolve().unwrap();
 // let service: Box<dyn ISomeTrait> = sp.resolve().unwrap();
 ```
@@ -233,38 +239,60 @@ let service: SomeService = sp.resolve().unwrap();
 use xdi::types::type_info::TypeInfoSource;
 
 let service = sp.resolve_raw(SomeService::type_info()).unwrap();
-// let service = sp.resolve(Box<dyn ISomeTrait>::type_info()).unwrap();
+// let service = sp.resolve(Box::<dyn ISomeTrait>::type_info()).unwrap();
 
 let service = service.unbox::<SomeService>().unwrap();
+// let service = service.unbox::<Box<dyn ISomeTrait>>().unwrap();
 ```
 
 ##### As vector of services, which has some mapping
 
 ```rust
+builder.transient(|_| Ok(SomeService {}))
+    .map_as_trait::<dyn ISomeTrait>();
+
+builder.transient(|_| Ok(OtherService {}))
+    .map_as_trait::<dyn ISomeTrait>();
+
 let services: Vec<Box<dyn ISomeTrait>> = sp.resolve_all().unwrap();
 ```
 
 ##### As vector of boxed services, which has some mapping
 
 ```rust
-use xdi::types::type_info::TypeInfoSource;
+use xdi::types::{type_info::TypeInfoSource, boxed_service::BoxedService};
 
-let services: Vec<BoxedService> = sp.resolve_all_raw(Box<dyn ISomeTrait>::type_info()).unwrap();
+builder.transient(|_| Ok(SomeService {}))
+    .map_as_trait::<dyn ISomeTrait>();
+
+builder.transient(|_| Ok(OtherService {}))
+    .map_as_trait::<dyn ISomeTrait>();
+
+let services: Vec<BoxedService> = sp.resolve_all_raw(Box::<dyn ISomeTrait>::type_info()).unwrap();
 ```
 
 ##### As dependency in task scope
 
 ```rust
-
-tokio::spawn(async move {
-    let service = sp.resolve::<SomeService>().unwrap();
-
-    // In second time resolve return instanse clone (like singletone)
-    let service = sp.resolve::<SomeService>().unwrap();
-}.add_service_span())
-
-tokio::spawn(async move {
-    // New task has own SomeService instance
-    let service = sp.resolve::<SomeService>().unwrap();
-}.add_service_span())
+#[cfg(feature = "task-local")]
+{
+    use xdi::IAsyncTaskScope;
+    
+    builder.task_local(|_| Ok(SomeService {}));
+    
+    let sp = builder.build();
+    let sp2 = sp.clone();
+    
+    tokio::spawn(async move {
+        let service = sp.resolve::<SomeService>().unwrap();
+    
+        // In second time resolve return instanse clone (like singletone)
+        let service = sp.resolve::<SomeService>().unwrap();
+    }.add_service_span());
+    
+    tokio::spawn(async move {
+        // New task has own SomeService instance
+        let service = sp2.resolve::<SomeService>().unwrap();
+    }.add_service_span());
+}
 ```
