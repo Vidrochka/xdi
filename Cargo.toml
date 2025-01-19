@@ -1,6 +1,6 @@
 [package]
 name = "xdi"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Vidrochka <Evgenuy1605@yandex.ru>"]
 description = "Rust di containers system"

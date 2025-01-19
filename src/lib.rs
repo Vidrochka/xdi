@@ -433,31 +433,163 @@ pub struct ServiceProvider {
 }
 
 impl ServiceProvider {
+    /// Get global service provider
+    /// 
+    /// # Example
+    /// ```rust
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # pub struct SomeService {}
+    /// # 
+    /// let builder = DiBuilder::new();
+    /// 
+    /// builder.transient(|_| Ok(SomeService {}));
+    /// 
+    /// builder.build_global();
+    ///  
+    /// let service = ServiceProvider::get().unwrap().resolve::<SomeService>().unwrap();
+    /// ```
     pub fn get<'a>() -> Option<&'a ServiceProvider> {
         SERVICE_PROVIDER.get()
     }
 
+    /// Build new service
+    /// 
+    /// # Example
+    /// ```rust
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # pub struct SomeService {}
+    /// #
+    /// # let builder = DiBuilder::new();
+    /// #
+    /// # builder.transient(|_| Ok(SomeService {}));
+    /// #
+    /// # let sp = builder.build();
+    /// # 
+    /// let service: SomeService = sp.resolve().unwrap();
+    /// // let service: Box<dyn ISomeTrait> = sp.resolve().unwrap();
+    /// ```
     pub fn resolve<TService: 'static>(&self) -> ServiceBuildResult<TService> {
         self.mapping_layer.resolve::<TService>(self.clone())
     }
 
+    /// Build new service by type info
+    /// 
+    /// # Example
+    /// ```rust
+    /// use xdi::types::type_info::TypeInfoSource;
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # pub struct SomeService {}
+    /// #
+    /// # let builder = DiBuilder::new();
+    /// #
+    /// # builder.transient(|_| Ok(SomeService {}));
+    /// #
+    /// # let sp = builder.build();
+    /// 
+    /// let service = sp.resolve_raw(SomeService::type_info()).unwrap();
+    /// // let service = sp.resolve(Box::<dyn ISomeTrait>::type_info()).unwrap();
+    /// 
+    /// let service = service.unbox::<SomeService>().unwrap();
+    /// // let service = service.unbox::<Box<dyn ISomeTrait>>().unwrap();
+    /// ```
     pub fn resolve_raw(&self, ty: TypeInfo) -> ServiceBuildResult<BoxedService> {
         self.mapping_layer.resolve_raw(ty, self.clone())
     }
 
+    /// Create all services by type
+    /// 
+    /// # Example
+    /// ```rust
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # pub struct SomeService {}
+    /// #
+    /// # pub struct OtherService {}
+    /// #
+    /// # pub trait ISomeTrait {}
+    /// #
+    /// # impl ISomeTrait for SomeService {}
+    /// # 
+    /// # impl ISomeTrait for OtherService {}
+    /// #
+    /// # let builder = DiBuilder::new();
+    /// #
+    /// builder.transient(|_| Ok(SomeService {}))
+    ///     .map_as_trait::<dyn ISomeTrait>();
+    /// 
+    /// builder.transient(|_| Ok(OtherService {}))
+    ///     .map_as_trait::<dyn ISomeTrait>();
+    /// #
+    /// # let sp = builder.build();
+    /// 
+    /// let services: Vec<Box<dyn ISomeTrait>> = sp.resolve_all().unwrap();
+    /// ```
     pub fn resolve_all<TService: 'static>(&self) -> ServiceBuildResult<Vec<TService>> {
         self.mapping_layer.resolve_all::<TService>(self.clone())
     }
 
+    /// Create all services by type info
+    /// 
+    /// # Example
+    /// ```rust
+    /// use xdi::types::{type_info::TypeInfoSource, boxed_service::BoxedService};
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # pub struct SomeService {}
+    /// #
+    /// # pub struct OtherService {}
+    /// #
+    /// # pub trait ISomeTrait {}
+    /// #
+    /// # impl ISomeTrait for SomeService {}
+    /// # 
+    /// # impl ISomeTrait for OtherService {}
+    /// #
+    /// # let builder = DiBuilder::new();
+    /// 
+    /// builder.transient(|_| Ok(SomeService {}))
+    ///     .map_as_trait::<dyn ISomeTrait>();
+    /// 
+    /// builder.transient(|_| Ok(OtherService {}))
+    ///     .map_as_trait::<dyn ISomeTrait>();
+    /// #
+    /// # let sp = builder.build();
+    /// 
+    /// let services: Vec<BoxedService> = sp.resolve_all_raw(Box::<dyn ISomeTrait>::type_info()).unwrap();
+    /// ```
     pub fn resolve_all_raw(&self, ty: TypeInfo) -> ServiceBuildResult<Vec<BoxedService>> {
         self.mapping_layer.resolve_all_raw(ty, self.clone())
     }
 
+    /// Register service provider as global object
+    /// 
+    /// # Example
+    /// ```rust
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # pub struct SomeService {}
+    /// # 
+    /// let builder = DiBuilder::new();
+    /// 
+    /// builder.transient(|_| Ok(SomeService {}));
+    /// 
+    /// let sp = builder.build();
+    /// 
+    /// sp.install_global();
+    /// 
+    /// let service = ServiceProvider::get().unwrap().resolve::<SomeService>().unwrap();
+    /// ```
     pub fn install_global(self) {
         SERVICE_PROVIDER.set(self).unwrap();
     }
 
     #[cfg(feature = "task-local")]
+    /// Build span for async closure
+    /// 
+    /// Dont use manualy. Use `tokio::spawn(async {}.async_task_span())`
     pub async fn async_task_span<F: Future>(f: F) -> F::Output {
         TaskLocalCtx::span(f).await
     }
@@ -474,6 +606,44 @@ pub trait IAsyncTaskScope {
 impl<TFut: Future> IAsyncTaskScope for TFut {
     type TFutRes = TFut::Output;
 
+    /// Add service span for async closure
+    /// 
+    /// # Example
+    /// ```rust
+    /// use xdi::IAsyncTaskScope;
+    /// # use xdi::{builder::DiBuilder, ServiceProvider};
+    /// #
+    /// # #[derive(Clone)]
+    /// # pub struct SomeService {}
+    /// #
+    /// # let builder = DiBuilder::new();
+    /// 
+    /// builder.task_local(|_| Ok(SomeService {}));
+    /// 
+    /// let sp = builder.build();
+    /// let sp2 = sp.clone();
+    /// 
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread()
+    /// #   .worker_threads(4)
+    /// #   .build()
+    /// #   .unwrap();
+    /// #
+    /// # runtime.block_on(async move {
+    /// #
+    /// tokio::spawn(async move {
+    ///     let service = sp.resolve::<SomeService>().unwrap();
+    /// 
+    ///     // In second time resolve return instanse clone (like singletone)
+    ///     let service = sp.resolve::<SomeService>().unwrap();
+    /// }.add_service_span());
+    /// 
+    /// tokio::spawn(async move {
+    ///     // New task has own SomeService instance
+    ///     let service = sp2.resolve::<SomeService>().unwrap();
+    /// }.add_service_span());
+    /// #
+    /// # });
+    /// ```
     fn add_service_span(self) -> impl Future<Output = Self::TFutRes> {
         ServiceProvider::async_task_span(self)
     }
