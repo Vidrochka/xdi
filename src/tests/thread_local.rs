@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Mutex, thread};
 
-use crate::builder::SimpleDiBuilder;
+use crate::builder::DiBuilder;
 
 #[derive(Clone)]
 pub struct Service1 {
@@ -24,7 +24,7 @@ impl IPayloadSrc for Service1 {
 
 #[test]
 fn set_get_thread_local_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.thread_local(|_| {
         Ok(Service1 {
@@ -63,7 +63,7 @@ fn set_get_thread_local_ok() {
 
 #[test]
 fn set_get_thread_local_trait_object_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder
         .thread_local(|_| {

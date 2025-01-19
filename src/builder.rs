@@ -13,13 +13,13 @@ use crate::{
 
 /// Builder for DI container
 #[derive(Debug, Default)]
-pub struct SimpleDiBuilder {
+pub struct DiBuilder {
     service_layer: ServiceLayerBuilder,
     scope_layer: ScopeLayerBuilder,
     mapping_layer: MappingLayerBuilder,
 }
 
-impl SimpleDiBuilder {
+impl DiBuilder {
     pub fn new() -> Self {
         Default::default()
     }
@@ -29,7 +29,7 @@ impl SimpleDiBuilder {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::builder::SimpleDiBuilder;
+    /// use xdi::builder::DiBuilder;
     ///
     /// pub struct SomeService {
     ///   pub payload: String
@@ -43,7 +43,7 @@ impl SimpleDiBuilder {
     ///   pub nested_service: SomeServiceDeep
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.transient(|_| Ok(SomeService { payload: "1".to_string() }));
     /// builder.transient(|sp| Ok(SomeServiceDeep { nested_service: sp.resolve()? }));
@@ -59,13 +59,13 @@ impl SimpleDiBuilder {
     pub fn transient<TService: 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> SimpleDiBuilderService<TService> {
+    ) -> DiBuilderService<TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_transient::<TService>();
         self.mapping_layer
             .add_mapping::<TService, TService>(|x| Ok(x));
 
-        SimpleDiBuilderService::new(self)
+        DiBuilderService::new(self)
     }
 
     /// Register scoped service
@@ -73,7 +73,7 @@ impl SimpleDiBuilder {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::builder::SimpleDiBuilder;
+    /// use xdi::builder::DiBuilder;
     /// use std::sync::{Arc, Mutex};
     ///
     /// pub struct SomeService {
@@ -88,7 +88,7 @@ impl SimpleDiBuilder {
     ///   pub nested_service: SomeServiceDeep
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.singletone(|_| Ok(Arc::new(Mutex::new(SomeService { payload: "1".to_string() }))));
     /// builder.transient(|sp| Ok(SomeServiceDeep { nested_service: sp.resolve()? }));
@@ -110,13 +110,13 @@ impl SimpleDiBuilder {
     pub fn singletone<TService: Send + Sync + Clone + 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> SimpleDiBuilderService<TService> {
+    ) -> DiBuilderService<TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_singletone::<TService>();
         self.mapping_layer
             .add_mapping::<TService, TService>(|x| Ok(x));
 
-        SimpleDiBuilderService::new(self)
+        DiBuilderService::new(self)
     }
 
     #[cfg(feature = "task-local")]
@@ -125,7 +125,7 @@ impl SimpleDiBuilder {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::{builder::SimpleDiBuilder, IAsyncTaskScope};
+    /// use xdi::{builder::DiBuilder, IAsyncTaskScope};
     /// use std::sync::{Arc, Mutex};
     ///
     /// #[derive(Clone)]
@@ -138,7 +138,7 @@ impl SimpleDiBuilder {
     ///     .build()
     ///     .unwrap();
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.task_local(|_| Ok(SomeService { payload: Arc::new(Mutex::new("1".to_string())) }));
     ///
@@ -174,13 +174,13 @@ impl SimpleDiBuilder {
     pub fn task_local<TService: Send + Sync + Clone + 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> SimpleDiBuilderService<TService> {
+    ) -> DiBuilderService<TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_task_local::<TService>();
         self.mapping_layer
             .add_mapping::<TService, TService>(|x| Ok(x));
 
-        SimpleDiBuilderService::new(self)
+        DiBuilderService::new(self)
     }
 
     /// Register thread scoped service
@@ -188,7 +188,7 @@ impl SimpleDiBuilder {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::builder::SimpleDiBuilder;
+    /// use xdi::builder::DiBuilder;
     /// use std::{rc::Rc, sync::Mutex, thread};
     ///
     /// #[derive(Clone)]
@@ -196,7 +196,7 @@ impl SimpleDiBuilder {
     ///   pub payload: Rc<Mutex<String>>
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.thread_local(|_| Ok(SomeService { payload: Rc::new(Mutex::new("1".to_string())) }));
     ///
@@ -229,13 +229,13 @@ impl SimpleDiBuilder {
     pub fn thread_local<TService: Clone + 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> SimpleDiBuilderService<TService> {
+    ) -> DiBuilderService<TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_thread_local::<TService>();
         self.mapping_layer
             .add_mapping::<TService, TService>(|x| Ok(x));
 
-        SimpleDiBuilderService::new(self)
+        DiBuilderService::new(self)
     }
 
     /// Build service provider
@@ -243,13 +243,13 @@ impl SimpleDiBuilder {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::builder::SimpleDiBuilder;
+    /// use xdi::builder::DiBuilder;
     ///
     /// pub struct SomeService {
     ///   pub payload: String
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.transient(|_| Ok(SomeService { payload: "1".to_string() }));
     ///
@@ -275,13 +275,13 @@ impl SimpleDiBuilder {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::{builder::SimpleDiBuilder, ServiceProvider};
+    /// use xdi::{builder::DiBuilder, ServiceProvider};
     ///
     /// pub struct SomeService {
     ///   pub payload: String
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.transient(|_| Ok(SomeService { payload: "1".to_string() }));
     ///
@@ -298,13 +298,13 @@ impl SimpleDiBuilder {
 }
 
 /// Builder for service
-pub struct SimpleDiBuilderService<'a, TService: 'static> {
+pub struct DiBuilderService<'a, TService: 'static> {
     pd: PhantomData<TService>,
-    builder: &'a SimpleDiBuilder,
+    builder: &'a DiBuilder,
 }
 
-impl<'a, TService> SimpleDiBuilderService<'a, TService> {
-    fn new(builder: &'a SimpleDiBuilder) -> Self {
+impl<'a, TService> DiBuilderService<'a, TService> {
+    fn new(builder: &'a DiBuilder) -> Self {
         Self {
             pd: PhantomData,
             builder,
@@ -317,7 +317,7 @@ impl<'a, TService> SimpleDiBuilderService<'a, TService> {
     ///
     /// ```rust
     ///
-    /// use simple_di::builder::SimpleDiBuilder;
+    /// use xdi::builder::DiBuilder;
     ///
     /// pub struct SomeService {
     ///   pub payload: String
@@ -327,7 +327,7 @@ impl<'a, TService> SimpleDiBuilderService<'a, TService> {
     ///  pub payload: String
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.transient(|_| Ok(SomeService {payload: "1".to_string()}))
     ///    .map_as(|x| Ok(SomeServiceExtra { payload: format!("{}2", x.payload) }));
@@ -358,7 +358,7 @@ impl<'a, TService> SimpleDiBuilderService<'a, TService> {
     /// # Example
     ///
     /// ```rust
-    /// use simple_di::builder::SimpleDiBuilder;
+    /// use xdi::builder::DiBuilder;
     ///
     /// pub struct SomeService {
     ///    pub payload: String
@@ -374,7 +374,7 @@ impl<'a, TService> SimpleDiBuilderService<'a, TService> {
     ///     }
     /// }
     ///
-    /// let builder = SimpleDiBuilder::new();
+    /// let builder = DiBuilder::new();
     ///
     /// builder.transient(|_| Ok(SomeService {payload: "1".to_string()}))
     ///     .map_as_trait::<dyn GetServicePayload>();

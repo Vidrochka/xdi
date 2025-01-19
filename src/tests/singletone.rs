@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::builder::SimpleDiBuilder;
+use crate::builder::DiBuilder;
 
 pub struct Service1 {
     pub payload: String,
@@ -8,7 +8,7 @@ pub struct Service1 {
 
 #[test]
 pub fn set_get_singletone_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.singletone(|_| {
         Ok(Arc::new(Mutex::new(Service1 {

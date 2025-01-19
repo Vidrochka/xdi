@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::runtime::Builder;
 
-use crate::{IAsyncTaskScope, builder::SimpleDiBuilder};
+use crate::{IAsyncTaskScope, builder::DiBuilder};
 
 #[derive(Clone)]
 pub struct Service1 {
@@ -31,7 +31,7 @@ fn set_get_task_local_ok() {
         .build()
         .unwrap();
 
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.task_local(|_| {
         Ok(Service1 {
@@ -79,7 +79,7 @@ fn set_get_task_local_trait_object_ok() {
         .build()
         .unwrap();
 
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder
         .task_local(|_| {

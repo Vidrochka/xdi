@@ -1,4 +1,4 @@
-# simple-di
+# xdi
 
 Simple service dependency graph container implementation
 
@@ -27,7 +27,7 @@ Simple service dependency graph container implementation
 - Main test cases allowed in tests folder
 
 ```rust
-use simple_di::builder::SimpleDiBuilder;
+use xdi::builder::DiBuilder;
 use std::sync::{Arc, Mutex};
 
 pub trait ISomeTrait {
@@ -53,7 +53,7 @@ pub struct SomeServiceDeeper {
 }
 
 fn main() {   
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     // register singletone
     builder.singletone(|_| Ok(Arc::new(Mutex::new(SomeService { payload: "1".to_string() }))));
@@ -97,9 +97,9 @@ Create container builder
 
 ```rust
 
-let builder = SimpleDiBuilder::new();
+let builder = DiBuilder::new();
 // or
-// let builder = SimpleDiBuilder::default();
+// let builder = DiBuilder::default();
 ```
 
 ### Register the service
@@ -230,7 +230,7 @@ let service: SomeService = sp.resolve().unwrap();
 ##### As boxed service
 
 ```rust
-use simple_di::types::type_info::TypeInfoSource;
+use xdi::types::type_info::TypeInfoSource;
 
 let service = sp.resolve_raw(SomeService::type_info()).unwrap();
 // let service = sp.resolve(Box<dyn ISomeTrait>::type_info()).unwrap();
@@ -247,7 +247,7 @@ let services: Vec<Box<dyn ISomeTrait>> = sp.resolve_all().unwrap();
 ##### As vector of boxed services, which has some mapping
 
 ```rust
-use simple_di::types::type_info::TypeInfoSource;
+use xdi::types::type_info::TypeInfoSource;
 
 let services: Vec<BoxedService> = sp.resolve_all_raw(Box<dyn ISomeTrait>::type_info()).unwrap();
 ```

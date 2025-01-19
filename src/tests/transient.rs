@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::Mutex};
 
 use crate::{
     ServiceProvider,
-    builder::SimpleDiBuilder,
+    builder::DiBuilder,
     types::{error::ServiceBuildResult, type_info::TypeInfoSource},
 };
 
@@ -51,7 +51,7 @@ impl IGetInnerWithModyfy for Service1 {
 
 #[test]
 pub fn set_get_transient_from_closure_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.transient(|_| {
         Ok(Service1 {
@@ -74,7 +74,7 @@ pub fn set_get_transient_from_closure_ok() {
 
 #[test]
 pub fn set_get_transient_from_fn_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     fn service_ctr(_sp: ServiceProvider) -> ServiceBuildResult<Service1> {
         Ok(Service1 {
@@ -99,7 +99,7 @@ pub fn set_get_transient_from_fn_ok() {
 
 #[test]
 pub fn set_get_transient_from_method_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     trait Ctor {
         fn service_ctr(_sp: ServiceProvider) -> ServiceBuildResult<Service1>;
@@ -130,7 +130,7 @@ pub fn set_get_transient_from_method_ok() {
 
 #[test]
 pub fn set_get_raw_transient_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.transient(|_| {
         Ok(Service1 {
@@ -153,7 +153,7 @@ pub fn set_get_raw_transient_ok() {
 
 #[test]
 pub fn set_get_not_send_transient_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.transient(|_| {
         Ok(ServiceNotSend1 {
@@ -176,7 +176,7 @@ pub fn set_get_not_send_transient_ok() {
 
 #[test]
 pub fn set_get_nested_transient_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder.transient(|_| {
         Ok(Service1 {
@@ -211,7 +211,7 @@ pub struct Service1Extra {
 
 #[test]
 pub fn set_get_transient_with_mapping_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder
         .transient(|_| {
@@ -238,7 +238,7 @@ pub fn set_get_transient_with_mapping_ok() {
 
 #[test]
 pub fn set_get_transient_with_mapping_trait_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder
         .transient(|_| {
@@ -266,7 +266,7 @@ pub fn set_get_transient_with_mapping_trait_ok() {
 
 #[test]
 pub fn get_all_transient_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder
         .transient(|_| {
@@ -296,7 +296,7 @@ pub fn get_all_transient_ok() {
 
 #[test]
 pub fn get_all_transient_raw_ok() {
-    let builder = SimpleDiBuilder::new();
+    let builder = DiBuilder::new();
 
     builder
         .transient(|_| {
