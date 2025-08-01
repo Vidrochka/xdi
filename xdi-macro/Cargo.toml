@@ -1,0 +1,20 @@
+[package]
+name = "xdi-macro"
+version = "0.1.0"
+edition = "2024"
+authors = ["Vidrochka <Evgenuy1605@yandex.ru>"]
+description = "Rust di containers system"
+license = "MIT"
+homepage = "https://github.com/Vidrochka/xdi"
+repository = "https://github.com/Vidrochka/xdi"
+keywords = ["x", "di", "ioc", "xdi", "dependency-injection"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+inventory = "0.3"
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro-crate = { version = "3" }
+proc-macro2 = "1"

@@ -1,4 +1,3 @@
-
 # xdi
 
 Simple service dependency graph container implementation
@@ -53,7 +52,7 @@ pub struct SomeServiceDeeper {
     pub nested_service: SomeServiceDeep
 }
 
-fn main() {   
+fn main() {
     let builder = DiBuilder::new();
 
     // register singletone
@@ -103,10 +102,12 @@ let builder = DiBuilder::default();
 ```
 
 ### Register the service
+
 - Mutable access not required, builder can be shared by ref
-- Registration fn takes used ServiceProvider and can resolve nested dependency 
+- Registration fn takes used ServiceProvider and can resolve nested dependency
 
 ##### As transient
+
 - Create new instance every call
 - Allowed !Send + !Sync
 
@@ -124,7 +125,8 @@ builder.transient(|sp: ServiceProvider| Ok(Repository {
 }));
 ```
 
-##### As singletone  
+##### As singletone
+
 - Lazy creation on the first invocation and return a clone on every next invocation
 - Singletone required clone for service (you can wrap to Arc or derive Clone)
 - Singletone required Sync + Send because it can be shared anywhere
@@ -139,6 +141,7 @@ builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
 ```
 
 ##### As task local
+
 - Lazy creation on the first invocation from the task scope and return a clone on every next invocation in same task scope
 - Task local required clone for service (you can wrap to Arc or derive Clone)
 - Task local required Sync + Send because it can be shared anywhere
@@ -148,7 +151,7 @@ builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
 {
     #[derive(Clone)]
     pub struct SomeService {}
-    
+
     builder.task_local(|_sp: ServiceProvider| Ok(SomeService {
         //... some initialization
     }));
@@ -156,6 +159,7 @@ builder.singletone(|_sp: ServiceProvider| Ok(SomeService {
 ```
 
 ##### As thread local
+
 - Lazy creation on the first invocation from the thread scope and return a clone on every next invocation in same thread scope
 - Thread local required clone for service (you can wrap to Rc or derive Clone)
 - Allowed !Send + !Sync
@@ -169,8 +173,70 @@ builder.thread_local(|_sp: ServiceProvider| Ok(SomeService {
 }));
 ```
 
+#### Injection
+
+You can inject service as fn constructor  
+All type ctors will be automatically registered on `builder.inject()` call
+Injection use `inventory`, so you can add injection from dependency crate
+
+```rust
+
+pub struct SomeService {}
+
+trait ISomeService1 {}
+
+impl ISomeService1 for SomeService {}
+
+trait ISomeService2 {}
+
+impl ISomeService2 for SomeService {}
+
+// As transient (for transient scope param can be omitted)
+#[xdi_macro::register_constructor(scope = "transient")]
+fn some_service_ctor(_sp: ServiceProvider) -> ServiceBuildResult<SomeService> {
+    Ok(SomeService{})
+}
+
+// As singleton
+#[xdi_macro::register_constructor(scope = "singleton")]
+fn some_service_ctor(_sp: ServiceProvider) -> ServiceBuildResult<SomeService> {
+    Ok(SomeService{})
+}
+
+// As thread local
+#[xdi_macro::register_constructor(scope = "thread_local")]
+fn some_service_ctor(_sp: ServiceProvider) -> ServiceBuildResult<SomeService> {
+    Ok(SomeService{})
+}
+
+// As task local
+#[xdi_macro::register_constructor(scope = "task_local")]
+fn some_service_ctor(_sp: ServiceProvider) -> ServiceBuildResult<SomeService> {
+    Ok(SomeService{})
+}
+
+// For every scope you can define multiple trait map
+#[xdi_macro::register_constructor(scope = "transient", map = [ISomeService1, ISomeService2])]
+fn some_service_ctor() {
+    Ok(SomeService{})
+}
+
+
+fn main() {
+    let builder = DiBuilder::new();
+
+    // inject for automatically type registration
+    builder.inject();
+
+    let sp = builder.build();
+
+    let service = sp.resolve::<SomeService>().unwrap();
+}
+
+```
 
 ### Map service
+
 - Mapping allow add new service representation for same constructor
 - Mapping (Service -> Service) auto-generated
 - You can add as many mappings for a single service as you need
@@ -197,6 +263,7 @@ builder.transient(|_sp: ServiceProvider| Ok(DbConnectionPool {
 ```
 
 ##### Trait object map
+
 - Create mapping to `Box<dyn ISomeTrait>` if service impl ISomeTrait
 
 ```rust
@@ -207,6 +274,7 @@ builder.transient(|_sp: ServiceProvider| Ok(SomeService {
 ```
 
 ### Build container
+
 - You can build container as var, or register global
 
 ##### Build container as var
@@ -277,19 +345,19 @@ let services: Vec<BoxedService> = sp.resolve_all_raw(Box::<dyn ISomeTrait>::type
 #[cfg(feature = "task-local")]
 {
     use xdi::IAsyncTaskScope;
-    
+
     builder.task_local(|_| Ok(SomeService {}));
-    
+
     let sp = builder.build();
     let sp2 = sp.clone();
-    
+
     tokio::spawn(async move {
         let service = sp.resolve::<SomeService>().unwrap();
-    
+
         // In second time resolve return instanse clone (like singletone)
         let service = sp.resolve::<SomeService>().unwrap();
     }.add_service_span());
-    
+
     tokio::spawn(async move {
         // New task has own SomeService instance
         let service = sp2.resolve::<SomeService>().unwrap();

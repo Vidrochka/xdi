@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    ServiceProvider,
+    Registration, ServiceProvider,
     layers::{
         mapping::MappingLayerBuilder, scope::ScopeLayerBuilder, service::ServiceLayerBuilder,
     },
@@ -19,9 +19,17 @@ pub struct DiBuilder {
     mapping_layer: MappingLayerBuilder,
 }
 
+inventory::collect!(Registration);
+
 impl DiBuilder {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn inject(&self) {
+        for inventory in inventory::iter::<Registration> {
+            (inventory.constructor)(&self);
+        }
     }
 
     /// Register transient service
@@ -59,7 +67,7 @@ impl DiBuilder {
     pub fn transient<TService: 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> DiBuilderService<TService> {
+    ) -> DiBuilderService<'_, TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_transient::<TService>();
         self.mapping_layer
@@ -110,7 +118,7 @@ impl DiBuilder {
     pub fn singletone<TService: Send + Sync + Clone + 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> DiBuilderService<TService> {
+    ) -> DiBuilderService<'_, TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_singletone::<TService>();
         self.mapping_layer
@@ -174,7 +182,7 @@ impl DiBuilder {
     pub fn task_local<TService: Send + Sync + Clone + 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> DiBuilderService<TService> {
+    ) -> DiBuilderService<'_, TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_task_local::<TService>();
         self.mapping_layer
@@ -229,7 +237,7 @@ impl DiBuilder {
     pub fn thread_local<TService: Clone + 'static>(
         &self,
         factory: impl Fn(ServiceProvider) -> ServiceBuildResult<TService> + Send + Sync + 'static,
-    ) -> DiBuilderService<TService> {
+    ) -> DiBuilderService<'_, TService> {
         self.service_layer.add_service(factory);
         self.scope_layer.add_thread_local::<TService>();
         self.mapping_layer

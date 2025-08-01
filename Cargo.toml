@@ -1,6 +1,6 @@
 [package]
 name = "xdi"
-version = "0.1.2"
+version = "0.2.2"
 edition = "2024"
 authors = ["Vidrochka <Evgenuy1605@yandex.ru>"]
 description = "Rust di containers system"
@@ -16,8 +16,15 @@ parking_lot = "0.12"
 anyhow = "1"
 thiserror = "2"
 
-tokio = { version = "1", features = ["rt", "rt-multi-thread"], default-features = false, optional = true }
+tokio = { version = "1", features = [
+    "rt",
+    "rt-multi-thread",
+], default-features = false, optional = true }
+
+inventory = { version = "0.3" }
+
+xdi-macro = { path = "xdi-macro", version = "0.1.0" }
 
 [features]
-default = []
+default = ["task-local"]
 task-local = ["dep:tokio"]

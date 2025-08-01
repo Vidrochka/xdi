@@ -340,3 +340,27 @@ pub fn get_all_transient_raw_ok() {
         "2"
     );
 }
+
+#[test]
+pub fn inventory_registration() {
+    struct TestTransient {
+        pub value: String,
+    }
+
+    #[xdi_macro::register_constructor]
+    fn registration(_: ServiceProvider) -> ServiceBuildResult<TestTransient> {
+        Ok(TestTransient {
+            value: "Hello, Inventory!".to_string(),
+        })
+    }
+
+    let builder = DiBuilder::new();
+
+    builder.inject();
+
+    let sp = builder.build();
+
+    let tt = sp.resolve::<TestTransient>().unwrap();
+
+    assert_eq!(tt.value, "Hello, Inventory!");
+}
